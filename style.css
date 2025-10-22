@@ -1,59 +1,69 @@
-body {
-  font-family: Arial, sans-serif;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
-  margin: 0;
-  background: linear-gradient(to bottom, #87ceeb, #fff);
+:root{
+  --fg:#101216;
+  --bg1:#0f1220;
+  --bg2:#1a2340;
+  --accent:#ff7a00;
+  --panel:rgba(255,255,255,.08);
+  --panelBorder:rgba(255,255,255,.12);
+  --shadow:rgba(0,0,0,.35);
+  --text:#e9eef6;
 }
 
-.game-container {
-  text-align: center;
-  width: 90%;
-  max-width: 400px;
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  color:var(--text);
+  background:
+    radial-gradient(1200px 700px at 20% -10%, #273057 0%, transparent 60%),
+    radial-gradient(800px 600px at 100% 0%, #141b33 0%, transparent 70%),
+    linear-gradient(160deg, var(--bg1), var(--bg2));
+  font-family: ui-sans-serif,system-ui,Segoe UI,Roboto,Apple SD Gothic Neo,Apple Color Emoji,Helvetica,Arial,sans-serif;
+  overflow:hidden;
 }
 
-.score-timer {
-  display: flex;
-  justify-content: space-between;
-  margin: 10px 0;
-  font-size: 1.2em;
+canvas#game{
+  display:block;
+  width:100vw;
+  height:100vh;
+  touch-action:none;      /* 모바일에서 스크롤/줌 방지 */
+  -webkit-user-select:none;
+  user-select:none;
 }
 
-.play-area {
-  position: relative;
-  width: 100%;
-  height: 400px;
-  background: #d3f4ff;
-  border: 2px solid #000;
-  overflow: hidden;
-  border-radius: 10px;
+#hud{
+  position:fixed;
+  left:0; right:0; top:12px;
+  display:flex; gap:10px; justify-content:center; pointer-events:none;
+}
+.badge{
+  pointer-events:none;
+  padding:8px 12px; border-radius:999px;
+  background:var(--panel);
+  border:1px solid var(--panelBorder);
+  box-shadow:0 6px 20px var(--shadow);
+  font-weight:700; letter-spacing:.2px;
+  backdrop-filter: blur(6px);
 }
 
-.ball {
-  position: absolute;
-  width: 50px;
-  height: 50px;
-  background: orange;
-  border-radius: 50%;
-  top: -60px;
-  cursor: pointer;
+#overlay{
+  position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  background:linear-gradient(to bottom, rgba(0,0,0,.55), rgba(0,0,0,.35));
+  text-align:center; padding:24px;
+  opacity:0; visibility:hidden; transition:.25s ease;
 }
+#overlay.visible{opacity:1; visibility:visible}
+#overlay h1{ margin:.2rem 0 .5rem; font-size:2.2rem; letter-spacing:.6px }
+#overlay p{ opacity:.9; line-height:1.5; margin-bottom:1.2rem }
 
-#startBtn {
-  margin-top: 15px;
-  padding: 10px 20px;
-  font-size: 1em;
-  cursor: pointer;
+button{
+  appearance:none; border:0; cursor:pointer; font-weight:800;
+  border-radius:12px; padding:12px 18px; font-size:16px;
+  background:var(--accent); color:#111; box-shadow:0 10px 24px var(--shadow);
 }
+button:active{ transform:translateY(1px) }
 
-.hidden {
-  display: none;
+#restart{
+  position:fixed; right:14px; bottom:14px;
 }
-
-#finalScore {
-  margin-top: 10px;
-  font-size: 1.5em;
-  font-weight: bold;
-}
+.hidden{ display:none }
