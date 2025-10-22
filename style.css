@@ -1,0 +1,59 @@
+body {
+  font-family: Arial, sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  margin: 0;
+  background: linear-gradient(to bottom, #87ceeb, #fff);
+}
+
+.game-container {
+  text-align: center;
+  width: 90%;
+  max-width: 400px;
+}
+
+.score-timer {
+  display: flex;
+  justify-content: space-between;
+  margin: 10px 0;
+  font-size: 1.2em;
+}
+
+.play-area {
+  position: relative;
+  width: 100%;
+  height: 400px;
+  background: #d3f4ff;
+  border: 2px solid #000;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+.ball {
+  position: absolute;
+  width: 50px;
+  height: 50px;
+  background: orange;
+  border-radius: 50%;
+  top: -60px;
+  cursor: pointer;
+}
+
+#startBtn {
+  margin-top: 15px;
+  padding: 10px 20px;
+  font-size: 1em;
+  cursor: pointer;
+}
+
+.hidden {
+  display: none;
+}
+
+#finalScore {
+  margin-top: 10px;
+  font-size: 1.5em;
+  font-weight: bold;
+}
