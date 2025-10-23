@@ -16,15 +16,15 @@
   const startBtn = document.getElementById('startBtn');
   const restartBtn = document.getElementById('restart');
 
-  // ---- Config (이 scene.png에 맞춘 기본값 포함)
+  // ---- Config (scene.png에 맞춘 기본값 포함)
   const Config = {
     roundSeconds: 10,
 
-    // 하단 1/2에서만 플릭 시작 + 임계값
+    // 입력: 하단 1/2에서만 시작 + 임계값
     input: {
       startZoneRatio: 0.5,
-      minSwipeUpVy: -90,     // 위로 던졌다고 볼 최소 vy(절댓값 작을수록 쉬움)
-      minSwipeSpeed: 550     // 최소 스와이프 평균 속도(px/s)
+      minSwipeUpVy: -60,     // 위로 던졌다고 볼 최소 vy(더 작게=쉽게)
+      minSwipeSpeed: 480     // 최소 스와이프 평균 속도(px/s)
     },
 
     // 씬 + 림 + 공
@@ -34,31 +34,40 @@
       ball:  (window.GAME_ASSETS && window.GAME_ASSETS.ball)  || null,
     },
 
-    // 씬(원본 이미지 좌표의 %) 기준 림 위치/크기 —— 본 scene.png용 추천값
+    // 씬(원본 이미지 좌표의 %) 기준 림 위치/크기 —— 제공 scene.png용
     sceneLayout: {
-      rimCxPct: 0.500,          // X: 씬 가로의 50% (중앙)
-      rimCyPct: 0.458,          // Y: 씬 세로의 45.8% (빨간바 중앙)
+      rimCxPct: 0.500,          // X: 씬 가로의 50%
+      rimCyPct: 0.458,          // Y: 씬 세로의 45.8%  (빨간바 중심)
       rimWidthPctOfWorld: 0.205 // 림 가로폭(월드 가로 대비)
     },
 
     // rim.png 내부 상대 위치(빨간바/오픈영역)
     rimImage: {
-      barCenterRelY: 0.12,  // rim.png 상단 기준 빨간바 중심
-      openLeftRel:   0.20,  // 골대 내부 좌/우 경계 (관대)
+      barCenterRelY: 0.12,  // rim.png top 기준 빨간바 중심
+      openLeftRel:   0.20,  // 골대 내부 좌/우 경계
       openRightRel:  0.80
     },
 
     // 물리
     physics: {
       gravity: 2800, air: 0.999,
-      wallRest: 0.70, floorRest: 0.55, rimRest: 0.78,
-      powerSwipe: 1100, powerDrag: 7.0, maxShotPower: 1900
+      wallRest: 0.70, floorRest: 0.55, rimRest: 0.76,
+      powerSwipe: 1400,   // ← 플릭 힘 상향
+      powerDrag: 7.0,
+      maxShotPower: 2600  // ← 전체 속도 상한 상향
+    },
+
+    // "진짜 농구" 느낌 보정
+    shooting: {
+      aimAssist: 0.18,       // 0~0.3: 플릭에 림 방향 18% 섞기(너무 높이면 오토에임 느낌)
+      clearMarginR: 0.65,    // 림을 넘길 최소 여유: 공 반지름의 0.65배
+      minVyBoost: 1.06       // vy_min에 약간의 여유(6%)를 더 줌
     },
 
     // 득점 판정(빨간바 바로 아래 가상선)
     scoring: {
-      lineOffset: 6,  // 빨간바 중심에서 아래로
-      expandX: 18     // 좌우 여유(관대)
+      lineOffset: 6,
+      expandX: 18
     },
 
     // 리스폰
@@ -206,7 +215,7 @@
   function collideHoop(ball){
     const rim = Game.hoop.rim;
     const inGoalX = (ball.x > Game.hoop.scoreLeft && ball.x < Game.hoop.scoreRight);
-    // 득점 구간 + 아래로 통과 중일 때는 바 충돌을 비활성화(원웨이 패스)
+    // 득점 구간 + 아래로 통과 중이면 바 충돌 비활성화(원웨이)
     const shouldCollideBar = (ball.vy < 0) || !inGoalX;
 
     if (shouldCollideBar){
@@ -250,7 +259,7 @@
     return false;
   }
 
-  // ---- Input (하단 1/2 시작 + 림 위로 드래그 금지)
+  // ---- Input (하단 1/2 시작 + 림 위로 드래그 금지 + 발사 물리 보강)
   class Input{
     constructor(){ this.active=false; this.sx=0; this.sy=0; this.x=0; this.y=0; this.samples=[];
       canvas.addEventListener('pointerdown', this.onDown, {passive:false});
@@ -273,7 +282,7 @@
     onMove=(e)=>{ if(!this.active) return; const p=this.toWorld(e); this.x=p.x; this.y=p.y; this.push(p.x,p.y);
       const b=Game.ball; if(b && b.held){
         b.x = this.x;
-        // 림 빨간바보다 위로는 절대 올릴 수 없게 (플릭 조준 난이도 안정화)
+        // 림 빨간바보다 위로는 절대 올릴 수 없게(조준 안정)
         const minY = Math.max(WORLD.h*0.5, Game.hoop.rim.barY + b.r + 12);
         b.y = clamp(this.y, minY, WORLD.h - b.r);
       } }
@@ -286,18 +295,51 @@
       const dt=(this.samples[this.samples.length-1].t - this.samples[i].t)/1000 || 1/60;
       const speed=Math.hypot(vdx,vdy)/(dt||1e-6);
 
+      // 기본 플릭/드래그에서 발사 속도(초기 추정)
       const dragVX=(this.sx-this.x)*Config.physics.powerDrag;
       const dragVY=(this.sy-this.y)*Config.physics.powerDrag;
       const swipeVX=-(vdx/dt)*(Config.physics.powerSwipe/1000);
       const swipeVY=-(vdy/dt)*(Config.physics.powerSwipe/1000);
-
       let vx=dragVX*0.2 + swipeVX*0.8;
       let vy=dragVY*0.2 + swipeVY*0.8;
 
-      // 위로 던진 제스처 + 최소 속도 조건
+      // 1) 위로 던진 제스처 + 최소 속도
       if (vy >= Config.input.minSwipeUpVy || speed < Config.input.minSwipeSpeed){ vx=0; vy=0; }
 
-      const spd=Math.hypot(vx,vy); if (spd > Config.physics.maxShotPower){ const s=Config.physics.maxShotPower/(spd||1); vx*=s; vy*=s; }
+      // 2) 에임 어시스트: 림 방향을 살짝 섞기(현실적으로 "골대로 향함")
+      if (Config.shooting.aimAssist > 0){
+        const rimCx = (Game.hoop.rim.openLeft + Game.hoop.rim.openRight) * 0.5;
+        const rimTopY = Game.hoop.rim.barY - b.r*0.25; // 림보다 약간 위를 향하도록
+        const dx = rimCx - b.x, dy = rimTopY - b.y;
+        const len = Math.hypot(dx,dy) || 1;
+        const ax = (dx/len) * Math.hypot(vx,vy);
+        const ay = (dy/len) * Math.hypot(vx,vy);
+        const a = Config.shooting.aimAssist;
+        vx = vx*(1-a) + ax*a;
+        vy = vy*(1-a) + ay*a;
+      }
+
+      // 3) 최소 포물선 보장: 림을 넘기 위해 필요한 vy_min = √(2 g h)
+      //    h = 현재 y에서 '림 위 여유(clearance)'까지 올라가야 하는 높이
+      const clearance = b.r * Config.shooting.clearMarginR + 10;  // 몇 px 여유
+      const targetY   = Game.hoop.rim.barY - clearance;
+      const needH     = Math.max(0, b.y - targetY);  // 화면 좌표: 아래로 +이므로 차이를 이렇게 계산
+      const vyMin     = Math.sqrt(2 * Config.physics.gravity * needH) * (Config.shooting.minVyBoost || 1);
+      if (-vy < vyMin) vy = -vyMin; // 위로 부족하면 보강
+
+      // 4) 전체 속도 상한 적용하되, vy_min은 유지되도록 재분배
+      let spd = Math.hypot(vx, vy);
+      if (spd > Config.physics.maxShotPower){
+        const s = Config.physics.maxShotPower / spd;
+        vx *= s; vy *= s;
+        // 스케일 후에도 vy가 다시 줄어 vyMin을 못 넘으면 vy 우선 확보
+        if (-vy < vyMin){
+          vy = -vyMin;
+          const vxAllowed = Math.sqrt(Math.max(0, Config.physics.maxShotPower**2 - vyMin**2));
+          vx = clamp(vx, -vxAllowed, vxAllowed);
+        }
+      }
+
       b.held=false; b.shot=true; b.vx=vx; b.vy=vy;
     }
 
@@ -400,7 +442,7 @@
   // ---- Calib Mode(현장 미세조정): C 토글 / ←→↑↓ 위치 / A,D 크기 / [,] 오픈폭
   let CAL = { on:false };
   window.addEventListener('keydown', (e)=>{
-    if (e.key.toLowerCase() === 'c') { CAL.on = !CAL.on; showToast(CAL.on?'CAL ON':'CAL OFF', '#ffd166'); render(); }
+    if (e.key.toLowerCase() === 'c') { CAL.on = !CAL.on; /*showToast(CAL.on?'CAL ON':'CAL OFF', '#ffd166');*/ render(); }
     if (!CAL.on) return;
     const step = e.shiftKey ? 0.001 : 0.002;
 
@@ -416,10 +458,7 @@
     if (e.key === ']') { Config.rimImage.openLeftRel += step;  Config.rimImage.openRightRel -= step; }
 
     buildHoop(); render();
-
-    if (e.key.toLowerCase() === 's'){ // S: 현재값 콘솔에 출력(복사해서 고정)
-      console.log(JSON.stringify({sceneLayout:Config.sceneLayout, rimImage:Config.rimImage}, null, 2));
-    }
+    if (e.key.toLowerCase() === 's'){ console.log(JSON.stringify({sceneLayout:Config.sceneLayout, rimImage:Config.rimImage}, null, 2)); }
   });
 
   // ---- Events / Init
