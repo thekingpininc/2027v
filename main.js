@@ -17,31 +17,38 @@
   const Config = {
     roundSeconds: 10,
 
-    input: {                 // 하단 1/2에서만 시작 + 최소 스와이프
-      startZoneRatio: 0.5,
-      minSwipeUpVy: -60,
-      minSwipeSpeed: 480
+    input: {
+      startZoneRatio: 0.5,   // 하단 1/2에서만 시작
+      minSwipeUpVy: -60,     // 위로 던졌다고 볼 최소 vy
+      minSwipeSpeed: 520,    // 최소 스와이프 속도(px/s) [상향]
+      minTotalTravel: 28,    // 최소 이동거리(px) — 드래그 강도
+      minUpTravel: 22,       // 최소 '위로 당긴' 거리(px)
+      rimNoCloseGapRatio: 0.18 // 림 가까이 끌어올리기 금지 갭 (림 너비 x 비율)
     },
 
-    assets: {                // index.html에서 주입
+    // 자산 (scene 합본 + rim + ball)
+    assets: {
       scene: (window.GAME_ASSETS && window.GAME_ASSETS.scene) || null,
       rim:   (window.GAME_ASSETS && window.GAME_ASSETS.rim)   || null,
       ball:  (window.GAME_ASSETS && window.GAME_ASSETS.ball)  || null,
     },
 
-    // scene.png 기준 림 위치/크기(%). 이 scene.png에 맞춘 기본값
+    // scene.png 기준 림 위치/크기(%) — 제공 씬에 맞춘 값
     sceneLayout: {
       rimCxPct: 0.500,
-      rimCyPct: 0.458,          // 빨간 바 중심
+      rimCyPct: 0.458,          // 빨간바 중심
       rimWidthPctOfWorld: 0.205
     },
 
     // rim.png 내부 상대 위치
     rimImage: {
-      barCenterRelY: 0.12,      // 빨간 바 중심의 상대 y
-      openLeftRel:   0.20,      // 내부 x 범위(득점 가능한 영역)
+      barCenterRelY: 0.12,
+      openLeftRel:   0.20,
       openRightRel:  0.80
     },
+
+    // 공 크기 확대(+5%)
+    ball: { scale: 1.05 },
 
     physics: {
       gravity: 2800, air: 0.999,
@@ -49,14 +56,14 @@
       powerSwipe: 1400, powerDrag: 7.0, maxShotPower: 2600
     },
 
-    shooting: {                 // 진짜 농구처럼 보이게
-      aimAssist: 0.18,          // 플릭에 림 방향 18% 혼합
-      clearMarginR: 0.65,       // 림 위로 넘길 여유(공 반지름 배수)
-      minVyBoost: 1.06          // vy_min에 여유
+    shooting: {
+      aimAssist: 0.18,       // 플릭에 림 방향 18% 혼합
+      clearMarginR: 0.65,    // 림을 넘길 여유(공 r 배수)
+      minVyBoost: 1.06       // vy_min 여유
     },
 
     scoring: {
-      lineOffset: 6,  // 바 중심에서 아래로 내린 득점선
+      lineOffset: 6,         // 바 중심에서 아래로 내린 득점선
       expandX: 18
     },
 
@@ -163,10 +170,8 @@
       this.vx=0; this.vy=0;
       this.held=false; this.shot=false; this.resting=false;
       this.lastY=y; this.timeSinceShot=0; this.scored=false;
-
-      // 2.5D 레이어
-      this.layer='front';      // 'front' = 림 위(앞), 'back' = 림 뒤
-      this.clearedTop=false;   // 빨간 바 위로 올라간 적이 있는가?
+      this.layer='front';     // 'front'|'back' (림 앞/뒤)
+      this.clearedTop=false;  // 림 위로 올라간 적
     }
     apply(dt){
       if(this.held) return;
@@ -189,30 +194,28 @@
     }
     draw(g){
       g.save(); g.shadowColor='rgba(0,0,0,.35)'; g.shadowBlur=12; g.shadowOffsetY=4;
-      if (Assets.ready.ball && Assets.ball){
-        const d=this.r*2; g.drawImage(Assets.ball, this.x-this.r, this.y-this.r, d, d);
-      } else {
-        g.beginPath(); g.arc(this.x,this.y,this.r,0,Math.PI*2);
-        g.fillStyle='#f2a23a'; g.fill(); g.lineWidth=2; g.strokeStyle='#cc7d11'; g.stroke();
-      }
+      if (Assets.ready.ball && Assets.ball){ const d=this.r*2; g.drawImage(Assets.ball, this.x-this.r, this.y-this.r, d, d); }
+      else { g.beginPath(); g.arc(this.x,this.y,this.r,0,Math.PI*2); g.fillStyle='#f2a23a'; g.fill(); g.lineWidth=2; g.strokeStyle='#cc7d11'; g.stroke(); }
       g.restore();
     }
   }
 
-  function spawnBall(){ const r=Math.max(28, WORLD.h/22); Game.ball=new Ball(WORLD.w*0.5, WORLD.h*0.86, r); }
+  function spawnBall(){
+    const baseR = Math.max(28, WORLD.h/22);
+    const r     = Math.round(baseR * Config.ball.scale); // +5%
+    Game.ball   = new Ball(WORLD.w*0.5, WORLD.h*0.86, r);
+  }
   function placeBallOnFloor(){
     const b=Game.ball; if(!b) return;
     b.x=WORLD.w*0.5; b.y=WORLD.h*0.86; b.vx=b.vy=0; b.held=false; b.shot=false; b.resting=false; b.scored=false; b.timeSinceShot=0;
     b.layer='front'; b.clearedTop=false;
   }
 
-  // --- 2.5D 레이어 업데이트
+  // --- 레이어링 업데이트(2.5D)
   function updateDepthLayer(ball){
     const rim = Game.hoop.rim;
-    const topLine = rim.barY - ball.r*0.35; // 빨간바 살짝 위
-    if (!ball.clearedTop && ball.y < topLine) ball.clearedTop = true; // 위로 넘김 기록
-
-    // 위로 넘겼고, 이제 내려오면서( vy>0 ) 림 내부 x범위로 들어오면 림 뒤로
+    const topLine = rim.barY - ball.r*0.35;
+    if (!ball.clearedTop && ball.y < topLine) ball.clearedTop = true;
     if (ball.clearedTop && ball.vy > 0 &&
         ball.x > Game.hoop.scoreLeft && ball.x < Game.hoop.scoreRight) {
       ball.layer = 'back';
@@ -223,10 +226,7 @@
   function collideHoop(ball){
     const rim = Game.hoop.rim;
     const inGoalX = (ball.x > Game.hoop.scoreLeft && ball.x < Game.hoop.scoreRight);
-
-    // ★ 핵심: 올라갈 땐(vy<0) 절대 바와 충돌하지 않음.
-    // 내려올 때도 림 내부라면 충돌하지 않음. 즉, 바는 (vy>=0 && !inGoalX)일 때만 유효.
-    const shouldCollideBar = (ball.vy >= 0) && !inGoalX;
+    const shouldCollideBar = (ball.vy >= 0) && !inGoalX; // 올라갈 땐 절대로 충돌 X, 내려와도 내부면 X
 
     if (shouldCollideBar){
       const ax=rim.openLeft, ay=rim.barY, bx=rim.openRight, by=rim.barY;
@@ -245,7 +245,6 @@
       }
     }
 
-    // 양끝 노드(원) 충돌 — 양방향
     const hitNode=(cx,cy,rn)=>{
       const dx=ball.x-cx, dy=ball.y-cy; const dist=Math.hypot(dx,dy), min=ball.r+rn;
       if(dist<min){ const nx=dx/(dist||1e-6), ny=dy/(dist||1e-6), pen=min-dist;
@@ -270,7 +269,7 @@
     return false;
   }
 
-  // --- 입력(하단 1/2 시작 + 림 위로 드래그 금지 + 발사 보정)
+  // --- 입력(강한 제스처만 발사, 림 근접 드래그 차단)
   class Input{
     constructor(){ this.active=false; this.sx=0; this.sy=0; this.x=0; this.y=0; this.samples=[];
       canvas.addEventListener('pointerdown', this.onDown, {passive:false});
@@ -293,19 +292,21 @@
     onMove=(e)=>{ if(!this.active) return; const p=this.toWorld(e); this.x=p.x; this.y=p.y; this.push(p.x,p.y);
       const b=Game.ball; if(b && b.held){
         b.x=this.x;
-        const minY=Math.max(WORLD.h*0.5, Game.hoop.rim.barY + b.r + 12); // 림 위로는 못 끌어올림
-        b.y=clamp(this.y, minY, WORLD.h - b.r);
+        // 림에 너무 가까운 곳까지 끌어올려 조준하는 것 방지
+        const gap = Game.hoop.rim.w * Config.input.rimNoCloseGapRatio + b.r;
+        const minY = Math.max(WORLD.h*0.5, Game.hoop.rim.barY + gap);
+        b.y = clamp(this.y, minY, WORLD.h - b.r);
       } }
 
     onUp=(e)=>{ if(!this.active) return; this.active=false; const b=Game.ball; if(!(b && b.held)) return;
-      // 최근 120ms 스와이프 벡터
+
+      // 최근 120ms 스와이프 측정
       let i=this.samples.length-1; const tLast=this.samples[i].t; while(i>0 && (tLast-this.samples[i-1].t)<120) i--;
       const vdx=this.samples[this.samples.length-1].x - this.samples[i].x;
       const vdy=this.samples[this.samples.length-1].y - this.samples[i].y;
       const dt=(this.samples[this.samples.length-1].t - this.samples[i].t)/1000 || 1/60;
       const speed=Math.hypot(vdx,vdy)/(dt||1e-6);
 
-      // 기본 발사 속도
       const dragVX=(this.sx-this.x)*Config.physics.powerDrag;
       const dragVY=(this.sy-this.y)*Config.physics.powerDrag;
       const swipeVX=-(vdx/dt)*(Config.physics.powerSwipe/1000);
@@ -313,9 +314,21 @@
       let vx=dragVX*0.2 + swipeVX*0.8;
       let vy=dragVY*0.2 + swipeVY*0.8;
 
-      if (vy >= Config.input.minSwipeUpVy || speed < Config.input.minSwipeSpeed){ vx=0; vy=0; }
+      // === 유효 제스처 판정(강도+방향) ===
+      const totalTravel = Math.hypot(this.x - this.sx, this.y - this.sy);
+      const upTravel    = this.sy - this.y; // 위로 당긴 양(+)이면 위로
+      const swipedUp    = (upTravel >= Config.input.minUpTravel) && (vy < 0);
+      const fastEnough  = speed >= Config.input.minSwipeSpeed;
+      const movedEnough = totalTravel >= Config.input.minTotalTravel;
+      const validSwipe  = swipedUp && fastEnough && movedEnough;
 
-      // 에임 어시스트(조금만)
+      if (!validSwipe){
+        // 클릭/약한 드래그는 발사하지 않음
+        b.held=false; b.shot=false;
+        return;
+      }
+
+      // 에임 어시스트(살짝만)
       if (Config.shooting.aimAssist > 0){
         const rimCx=(Game.hoop.rim.openLeft + Game.hoop.rim.openRight)*0.5;
         const rimTopY=Game.hoop.rim.barY - b.r*0.25;
@@ -365,7 +378,7 @@
     const b=Game.ball; if(!b) return;
     b.lastY=b.y; b.apply(dt);
 
-    // 2.5D 레이어 갱신 (위로 넘겼는지/내려오며 내부로 들어왔는지)
+    // 2.5D 레이어 갱신
     updateDepthLayer(b);
 
     // 득점 먼저
@@ -383,6 +396,7 @@
     }
   }
 
+  // 배경(scene) cover로 그리기
   function drawSceneCover(){
     if (!(Assets.ready.scene && Assets.scene)){
       const g=ctx.createLinearGradient(0,0,0,WORLD.h); g.addColorStop(0,'#163d6b'); g.addColorStop(1,'#0c1220');
@@ -407,22 +421,14 @@
     drawSceneCover();
 
     const b=Game.ball, rim=Game.hoop && Game.hoop.rim;
-    // 동적 레이어링: front(림 앞) / back(림 뒤)
     if (b && rim && Assets.ready.rim && Assets.rim){
-      if (b.layer === 'back'){            // 공을 먼저 그리고 → 림을 덮어 씀(공이 그물 뒤로 보임)
-        b.draw(ctx);
-        ctx.drawImage(Assets.rim, rim.x, rim.y, rim.w, rim.h);
-      } else {                            // 림을 먼저 그리고 → 공을 위에(앞에) 그리기
-        ctx.drawImage(Assets.rim, rim.x, rim.y, rim.w, rim.h);
-        b.draw(ctx);
-      }
+      if (b.layer === 'back'){ b.draw(ctx); ctx.drawImage(Assets.rim, rim.x, rim.y, rim.w, rim.h); }
+      else { ctx.drawImage(Assets.rim, rim.x, rim.y, rim.w, rim.h); b.draw(ctx); }
     } else {
-      // 림 또는 공이 없으면 기본 순서
       if (rim && Assets.ready.rim && Assets.rim) ctx.drawImage(Assets.rim, rim.x, rim.y, rim.w, rim.h);
       if (b) b.draw(ctx);
     }
 
-    // 조준선
     Game.input && Game.input.drawAim(ctx);
   }
 
