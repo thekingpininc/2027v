@@ -71,7 +71,7 @@
     // [MOD:SCORING] — 득점 판정
     scoring: { lineOffset: 6, expandX: 18 },
 
-    respawnDelayMs: 220
+    respawnDelayMs: 220 // (Goal에만 사용; 바닥 실패는 즉시 리셋)
   };
 
   // =========================
@@ -142,7 +142,7 @@
     State.dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
     const cssH = window.innerHeight;
     const scale = cssH / WORLD.h;
-    const cssW = Math.round(WORLD.w * scale);
+    aconst cssW = Math.round(WORLD.w * scale);
 
     canvas.width  = Math.round(WORLD.w * State.dpr);
     canvas.height = Math.round(WORLD.h * State.dpr);
@@ -191,6 +191,9 @@
       // 2.5D 레이어
       this.layer='front';     // 'front' | 'back'
       this.clearedTop=false;  // 림 위(빨간바 위)까지 올라간 적
+
+      // [MOD:INSTANT_RESET_ON_FLOOR] — 바닥 접촉 감지 플래그
+      this.hitFloor = false;
     }
     apply(dt){
       if(this.held) return;
@@ -203,8 +206,13 @@
       if (this.x - this.r < 0){ this.x=this.r; this.vx=Math.abs(this.vx)*Config.physics.wallRest; }
       if (this.x + this.r > WORLD.w){ this.x=WORLD.w-this.r; this.vx=-Math.abs(this.vx)*Config.physics.wallRest; }
 
+      // 바닥 충돌
       if (this.y + this.r > WORLD.h){
         this.y = WORLD.h - this.r;
+
+        // [MOD:INSTANT_RESET_ON_FLOOR] — 슛 상태에서 바닥 닿은 순간 기록
+        if (this.shot) this.hitFloor = true;
+
         if (this.vy > 0) this.vy = -this.vy * Config.physics.floorRest;
         this.vx *= 0.985;
         if (Math.abs(this.vx)<6 && Math.abs(this.vy)<25){ this.resting=true; this.vx=0; this.vy=0; }
@@ -232,6 +240,8 @@
     const b=Game.ball; if(!b) return;
     b.x=WORLD.w*0.5; b.y=WORLD.h*0.86; b.vx=b.vy=0; b.held=false; b.shot=false; b.resting=false; b.scored=false; b.timeSinceShot=0;
     b.layer='front'; b.clearedTop=false;
+    // [MOD:INSTANT_RESET_ON_FLOOR] — 리셋 시 바닥 플래그 초기화
+    b.hitFloor = false;
   }
 
   // =========================
@@ -468,13 +478,20 @@
       return;
     }
 
+    // [MOD:INSTANT_RESET_ON_FLOOR] — 슛 후 바닥 닿으면 즉시 FAIL + 즉시 리스폰
+    if (b.shot && !b.scored && b.hitFloor){
+      showToast('FAIL', '#ffd166');
+      placeBallOnFloor(); // 지연 없이 즉시 새 공
+      return;
+    }
+
     // 림 충돌
     if (b.shot) collideHoop(b);
 
-    // 실패
+    // (보호용) 다른 실패 조건 — 이론상 위의 즉시 리셋으로 잘 안 옴
     if ((b.y - b.r > WORLD.h + 140) || (b.shot && b.resting && b.timeSinceShot>0.25)){
       showToast('FAIL', '#ffd166');
-      setTimeout(()=>placeBallOnFloor(), Config.respawnDelayMs);
+      setTimeout(()=>placeBallOnFloor(), 0);
     }
   }
 
@@ -565,8 +582,4 @@
   restartBtn.addEventListener('click', startGame);
   resize();
   overlay.classList.add('visible');
-
-  // (선택) 캘리브레이션 모드가 필요하면 여기 키바인딩을 추가할 수 있습니다.
-  // C: 토글, ←→↑↓: 림 위치, A/D: 림 크기, [ / ]: 득점폭
-  // (요청 시 활성화 코드 넣어드림)
 })();
