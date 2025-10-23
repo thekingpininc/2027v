@@ -1,63 +1,62 @@
-/* [MOD:RESPONSIVE_TYPE] — 화면이 커지면 글자도 커지도록 clamp() 도입 */
+/* ===== Responsive, high-contrast UI for Quick Shot ===== */
+
+/* [MOD:RESPONSIVE_TYPE] — 화면 크기에 따라 자동으로 커지는 글자/여백 */
 :root{
-  --text:#eef2f7; --panel:rgba(0,0,0,.35);
-  --panelBorder:rgba(255,255,255,.18); --shadow:rgba(0,0,0,.50);
+  --text:#eef2f7; 
+  --panel:rgba(0,0,0,.35);
+  --panelBorder:rgba(255,255,255,.18);
+  --shadow:rgba(0,0,0,.50);
   --accent:#ff6a3d;
 
-  /* 폰트 사이즈(작은 화면~큰 화면) : clamp(min, fluid, max) */
-  --fs-badge: clamp(13px, 1.6vh, 22px);
-  --fs-toast: clamp(22px, 3.4vh, 44px);
-  --fs-h1:    clamp(22px, 4.6vh, 56px);
-  --fs-body:  clamp(13px, 2.2vh, 22px);
-  --fs-button:clamp(13px, 2.2vh, 22px);
+  /* 폰트 사이즈: clamp(min, fluid, max) — vh 기준으로 부드럽게 커짐 */
+  --fs-badge:  clamp(13px, 1.6vh, 22px);
+  --fs-toast:  clamp(22px, 3.4vh, 44px);
+  --fs-h1:     clamp(22px, 4.6vh, 56px);
+  --fs-body:   clamp(13px, 2.2vh, 22px);
+  --fs-button: clamp(13px, 2.2vh, 22px);
 
-  /* 여백/라운드도 함께 스케일 */
-  --pad-s: clamp(6px, 0.9vh, 12px);
-  --pad-m: clamp(10px, 1.6vh, 18px);
+  /* 여백/라운드도 스케일 */
+  --pad-s:  clamp(6px, 0.9vh, 12px);
+  --pad-m:  clamp(10px, 1.6vh, 18px);
   --gap-hud: clamp(8px, 1.2vh, 18px);
   --hud-top: clamp(8px, 1.4vh, 20px);
   --radius: clamp(10px, 1.6vh, 18px);
 }
 
-/* HUD */
+*{box-sizing:border-box}
+html,body{height:100%}
+
+body{
+  margin:0; 
+  background:#0a0f1a; 
+  color:var(--text); 
+  overflow:hidden;
+  font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Apple SD Gothic Neo,Helvetica,Arial,sans-serif;
+}
+
+/* 캔버스: 세로(높이) 100vh 고정. 좌우는 잘려도/여백 가능 */
+#game{
+  position:fixed; 
+  left:50%; 
+  top:0; 
+  transform:translateX(-50%);
+  height:100vh; 
+  display:block;
+  touch-action:none; 
+  -webkit-user-select:none; 
+  user-select:none;
+}
+
+/* ===== HUD (타이머/점수) ===== */
 #hud{
-  position:fixed; left:0; right:0; top:var(--hud-top);
-  display:flex; gap:var(--gap-hud); justify-content:center; pointer-events:none;
-}
-.badge{
+  position:fixed; 
+  left:0; right:0; 
+  top:var(--hud-top);
+  display:flex; 
+  gap:var(--gap-hud); 
+  justify-content:center; 
   pointer-events:none;
-  padding: var(--pad-s) var(--pad-m);
-  border-radius:999px; font-weight:800; font-size:var(--fs-badge);
-  background:var(--panel); border:1px solid var(--panelBorder);
-  box-shadow:0 10px 24px var(--shadow); letter-spacing:.2px; backdrop-filter: blur(6px);
 }
 
-/* 중앙 토스트 */
-#toast{
-  position:fixed; left:50%; top:46%; transform:translate(-50%,-50%);
-  padding: var(--pad-s) var(--pad-m);
-  font-weight:900; font-size:var(--fs-toast); letter-spacing:.6px;
-  color:#fff; text-shadow:0 4px 10px rgba(0,0,0,.45); opacity:0; transition:.22s ease;
-}
-#toast.show{ opacity:1 }
-
-
-/* 오버레이 */
-#overlay{
-  position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
-  background:linear-gradient(to bottom, rgba(0,0,0,.55), rgba(0,0,0,.35));
-  text-align:center; padding:var(--pad-m); opacity:0; visibility:hidden; transition:.25s ease;
-}
-#overlay.visible{ opacity:1; visibility:visible }
-#overlay h1{ margin:.2rem 0 .5rem; font-size:var(--fs-h1); line-height:1.1 }
-#overlay p{ font-size:var(--fs-body); opacity:.95; line-height:1.6; margin-bottom:var(--pad-m) }
-
-button{
-  appearance:none; border:0; cursor:pointer; font-weight:900;
-  border-radius:var(--radius); padding: var(--pad-m) var(--pad-m);
-  font-size:var(--fs-button);
-  background:var(--accent); color:#161616; box-shadow:0 10px 24px var(--shadow);
-}
-button:active{ transform:translateY(1px) }
-#restart{ position:fixed; right:14px; bottom:14px; }
-.hidden{ display:none }
+.badge{
+  po
