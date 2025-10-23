@@ -3,10 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
-  <title>Quick Shot (Scene + Rim)</title>
+  <title>Quick Shot</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <!-- 캔버스: 세로(높이) 100vh에 맞춤. 좌우는 잘려도/여백이 생겨도 OK -->
   <canvas id="game" aria-label="농구 게임 캔버스" role="img"></canvas>
 
   <!-- HUD -->
@@ -18,22 +19,22 @@
   <!-- 중앙 토스트(Goal/Fail) -->
   <div id="toast"></div>
 
-  <!-- 오버레이 -->
+  <!-- 시작/종료 오버레이 -->
   <div id="overlay" class="visible">
     <h1>Quick Shot</h1>
     <p>
       하단 1/2에서 공을 <strong>잡고</strong> → <strong>위로 휙!</strong> 던지세요.<br/>
-      림 <strong>빨간바 바로 아래</strong>를 <strong>위→아래</strong>로 통과하면 <strong>GOAL</strong>! (10초)
+      림 빨간바 <strong>바로 아래</strong>를 <strong>위→아래</strong>로 통과하면 <strong>GOAL</strong>! (제한시간 10초)
     </p>
     <button id="startBtn">게임 시작</button>
   </div>
 
   <button id="restart" class="hidden">다시 시작</button>
 
-  <!-- 자산 경로 설정 -->
+  <!-- 에셋 경로 -->
   <script>
     window.GAME_ASSETS = {
-      scene: 'assets/scene.png', // ← background + backboard 합본
+      scene: 'assets/scene.png',
       rim:   'assets/rim.png',
       ball:  'assets/ball.png'
     };
