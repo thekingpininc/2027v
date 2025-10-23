@@ -12,8 +12,7 @@
 *{box-sizing:border-box}
 html,body{height:100%}
 body{
-  margin:0;
-  color:var(--text);
+  margin:0; color:var(--text);
   background:
     radial-gradient(1200px 700px at 20% -10%, #273057 0%, transparent 60%),
     radial-gradient(800px 600px at 100% 0%, #141b33 0%, transparent 70%),
@@ -23,17 +22,12 @@ body{
 }
 
 canvas#game{
-  display:block;
-  width:100vw;
-  height:100vh;
-  touch-action:none;      /* 모바일에서 스크롤/줌 방지 */
-  -webkit-user-select:none;
-  user-select:none;
+  display:block; width:100vw; height:100vh;
+  touch-action:none; -webkit-user-select:none; user-select:none;
 }
 
 #hud{
-  position:fixed;
-  left:0; right:0; top:12px;
+  position:fixed; left:0; right:0; top:12px;
   display:flex; gap:10px; justify-content:center; pointer-events:none;
 }
 .badge{
@@ -62,8 +56,5 @@ button{
   background:var(--accent); color:#111; box-shadow:0 10px 24px var(--shadow);
 }
 button:active{ transform:translateY(1px) }
-
-#restart{
-  position:fixed; right:14px; bottom:14px;
-}
+#restart{ position:fixed; right:14px; bottom:14px; }
 .hidden{ display:none }
