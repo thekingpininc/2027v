@@ -27,51 +27,58 @@
       minSwipeSpeed: 520,    // 최소 스와이프 속도(px/s)
       minTotalTravel: 28,    // 총 이동거리 최소(px)
       minUpTravel: 22,       // '위로' 이동 최소(px)
-      rimNoCloseGapRatio: 0.18 // 림 가까이 끌어올려 조준 금지 갭(= 림 너비 * 비율 + 공 r)
+      rimNoCloseGapRatio: 0.18 // 림 가까이 끌어올려 조준 금지 (림 너비 * 비율 + 공 r)
     },
 
-    // [MOD:ASSETS]
+    // [MOD:ASSETS] — 씬 합본 + 림 + 공
     assets: {
-      scene: (window.GAME_ASSETS && window.GAME_ASSETS.scene) || null, // scene.png (배경+백보드 합본)
-      rim:   (window.GAME_ASSETS && window.GAME_ASSETS.rim)   || null, // rim.png
-      ball:  (window.GAME_ASSETS && window.GAME_ASSETS.ball)  || null, // ball.png
+      scene: (window.GAME_ASSETS && window.GAME_ASSETS.scene) || null,
+      rim:   (window.GAME_ASSETS && window.GAME_ASSETS.rim)   || null,
+      ball:  (window.GAME_ASSETS && window.GAME_ASSETS.ball)  || null,
     },
 
-    // [MOD:SCENE_LAYOUT] — 림 위치/크기 (scene 원본 좌표의 %)
+    // [MOD:RIM_POSITION] — 림 위치/크기 (scene 원본 좌표의 %)
+    // rimCyPct는 "빨간바 중심"의 세로 위치 — ↓로 갈수록 값이 커짐.
+    // ▶ 더 위로: 값을 줄이세요 (예: 0.446 → 0.444)
     sceneLayout: {
       rimCxPct: 0.500,
-      rimCyPct: 0.458,            // 빨간 바 중심
-      rimWidthPctOfWorld: 0.205   // 림 가로폭(월드 너비 비율)
+      rimCyPct: 0.446,          // 0.458에서 위로 0.012 올림
+      rimWidthPctOfWorld: 0.205 // 림 가로폭(월드 너비 비율)
     },
 
-    // [MOD:RIM_IMAGE] — rim.png 내부 상대 위치
+    // rim.png 내부 상대 위치
     rimImage: {
-      barCenterRelY: 0.12,  // 이미지 top 기준 빨간바 중심 비율
-      openLeftRel:   0.20,  // 내부 x 경계(득점폭)
+      barCenterRelY: 0.12,  // 이미지 top 기준 빨간바 중심 (살짝 어긋나면 0.115~0.125 조정)
+      openLeftRel:   0.20,
       openRightRel:  0.80
     },
 
-    // [MOD:BALL_SIZE] — 공 크기(+5%)
+    // 공 크기(+5%)
     ball: { scale: 1.05 },
 
-    // [MOD:PHYSICS] — 물리값
+    // 물리
     physics: {
       gravity: 2800, air: 0.999,
       wallRest: 0.70, floorRest: 0.55, rimRest: 0.76,
       powerSwipe: 1400, powerDrag: 7.0, maxShotPower: 2600
     },
 
-    // [MOD:SHOOTING] — 실제 농구 느낌: 림 위까지 올라갈 힘 보장 + 약한 에임 어시스트
+    // 슛 느낌: 림 위까지 올라갈 힘 보장 + 약한 에임 어시스트
     shooting: {
-      aimAssist: 0.18,   // 0~0.3: 플릭에 림 방향 섞기(너무 높이면 오토 느낌)
-      clearMarginR: 0.65,// 림을 넘길 최소 여유(공 반지름 배수)
-      minVyBoost: 1.06   // vy_min에 약간 여유
+      aimAssist: 0.18,          // 플릭에 림 방향 18% 혼합
+      clearMarginR: 0.65,       // 림을 넘길 최소 여유(공 r 배수)
+      minVyBoost: 1.06          // vy_min 여유
     },
 
-    // [MOD:SCORING] — 득점 판정
+    // 득점 판정
     scoring: { lineOffset: 6, expandX: 18 },
 
-    respawnDelayMs: 220 // (Goal에만 사용; 바닥 실패는 즉시 리셋)
+    // 즉시 리셋 관련
+    reset: {
+      oobMargin: 120            // [MOD:INSTANT_RESET_OUT_OF_BOUNDS] 장외 여유(px)
+    },
+
+    respawnDelayMs: 220         // Goal만 약간의 연출 딜레이
   };
 
   // =========================
@@ -142,7 +149,7 @@
     State.dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
     const cssH = window.innerHeight;
     const scale = cssH / WORLD.h;
-    aconst cssW = Math.round(WORLD.w * scale);
+    const cssW = Math.round(WORLD.w * scale);   // ← 오타 수정됨
 
     canvas.width  = Math.round(WORLD.w * State.dpr);
     canvas.height = Math.round(WORLD.h * State.dpr);
@@ -188,12 +195,13 @@
       this.vx=0; this.vy=0;
       this.held=false; this.shot=false; this.resting=false;
       this.lastY=y; this.timeSinceShot=0; this.scored=false;
+
       // 2.5D 레이어
       this.layer='front';     // 'front' | 'back'
       this.clearedTop=false;  // 림 위(빨간바 위)까지 올라간 적
 
-      // [MOD:INSTANT_RESET_ON_FLOOR] — 바닥 접촉 감지 플래그
-      this.hitFloor = false;
+      // 바닥 접촉 감지(즉시 리셋용)
+      this.hitFloor=false;
     }
     apply(dt){
       if(this.held) return;
@@ -206,13 +214,10 @@
       if (this.x - this.r < 0){ this.x=this.r; this.vx=Math.abs(this.vx)*Config.physics.wallRest; }
       if (this.x + this.r > WORLD.w){ this.x=WORLD.w-this.r; this.vx=-Math.abs(this.vx)*Config.physics.wallRest; }
 
-      // 바닥 충돌
+      // 바닥
       if (this.y + this.r > WORLD.h){
         this.y = WORLD.h - this.r;
-
-        // [MOD:INSTANT_RESET_ON_FLOOR] — 슛 상태에서 바닥 닿은 순간 기록
-        if (this.shot) this.hitFloor = true;
-
+        if (this.shot) this.hitFloor = true; // [MOD:INSTANT_RESET_ON_FLOOR]
         if (this.vy > 0) this.vy = -this.vy * Config.physics.floorRest;
         this.vx *= 0.985;
         if (Math.abs(this.vx)<6 && Math.abs(this.vy)<25){ this.resting=true; this.vx=0; this.vy=0; }
@@ -233,15 +238,13 @@
 
   function spawnBall(){
     const baseR = Math.max(28, WORLD.h/22);
-    const r     = Math.round(baseR * Config.ball.scale); // [MOD:BALL_SIZE] +5%
+    const r     = Math.round(baseR * Config.ball.scale); // +5%
     Game.ball   = new Ball(WORLD.w*0.5, WORLD.h*0.86, r);
   }
   function placeBallOnFloor(){
     const b=Game.ball; if(!b) return;
     b.x=WORLD.w*0.5; b.y=WORLD.h*0.86; b.vx=b.vy=0; b.held=false; b.shot=false; b.resting=false; b.scored=false; b.timeSinceShot=0;
-    b.layer='front'; b.clearedTop=false;
-    // [MOD:INSTANT_RESET_ON_FLOOR] — 리셋 시 바닥 플래그 초기화
-    b.hitFloor = false;
+    b.layer='front'; b.clearedTop=false; b.hitFloor=false;
   }
 
   // =========================
@@ -259,7 +262,7 @@
   }
 
   // =========================
-  // Rim Collision (원웨이) & Scoring
+  // Rim Collision(원웨이) & Scoring
   // =========================
   function collideHoop(ball){
     const rim = Game.hoop.rim;
@@ -348,7 +351,7 @@
       const p=this.toWorld(e); this.x=p.x; this.y=p.y; this.push(p.x,p.y);
       const b=Game.ball; if(b && b.held){
         b.x=this.x;
-        // [MOD:DRAG_LIMIT_NEAR_RIM] — 림 가까이 끌어올려 조준 금지
+        // 림에 너무 가까운 곳까지 끌어올려 조준 금지
         const gap  = Game.hoop.rim.w * Config.input.rimNoCloseGapRatio + b.r;
         const minY = Math.max(WORLD.h*0.5, Game.hoop.rim.barY + gap);
         b.y = clamp(this.y, minY, WORLD.h - b.r);
@@ -372,46 +375,39 @@
       // 제스처 기반 발사 벡터(위로 양수) — 슬링샷 느낌
       const dragVX  = (this.sx - this.x) * Config.physics.powerDrag;
       const dragVY  = (this.sy - this.y) * Config.physics.powerDrag;
-      const swipeVX = -(vdx/dt) * (Config.physics.powerSwipe/1000);
-      const swipeVY = -(vdy/dt) * (Config.physics.powerSwipe/1000);
+      const swipeVX = -(vdx/dt) * (Config.physics.powerSwipe / 1000);
+      const swipeVY = -(vdy/dt) * (Config.physics.powerSwipe / 1000);
       const launchVX = dragVX*0.2 + swipeVX*0.8;
-      const launchVY = dragVY*0.2 + swipeVY*0.8; // ★ 위로 드래그 시 양수
+      const launchVY = dragVY*0.2 + swipeVY*0.8; // ↑로 드래그 시 양수
 
-      // [MOD:INPUT_THRESHOLDS] — 유효 제스처(강도+방향) 체크
+      // 유효 제스처 체크
       const totalTravel = Math.hypot(this.x - this.sx, this.y - this.sy);
-      const upTravel    = this.sy - this.y; // 위로 당긴 양(+)
+      const upTravel    = this.sy - this.y; // ↑ 방향 이동량(+)
       const swipedUp    = (upTravel >= Config.input.minUpTravel) && (launchVY > 0);
       const fastEnough  = speed >= Config.input.minSwipeSpeed;
       const movedEnough = totalTravel >= Config.input.minTotalTravel;
       const validSwipe  = swipedUp && fastEnough && movedEnough;
 
       b.held=false;
-
-      if (!validSwipe){
-        // 클릭/약한 드래그는 발사하지 않음
-        b.shot=false;
-        return;
-      }
+      if (!validSwipe){ b.shot=false; return; }
 
       // 물리계 속도(위로 음수)
       let vx = launchVX;
-      let vy = -launchVY; // ★ 물리 좌표계 부호
+      let vy = -launchVY;
 
-      // [MOD:SHOOTING] — 약한 에임 어시스트(림 방향 18% 혼합)
+      // 약한 에임 어시스트
       if (Config.shooting.aimAssist > 0){
-        const rimCx = (Game.hoop.rim.openLeft + Game.hoop.rim.openRight)*0.5;
-        const rimTopY = Game.hoop.rim.barY - b.r*0.25;
+        const rimCx=(Game.hoop.rim.openLeft + Game.hoop.rim.openRight)*0.5;
+        const rimTopY=Game.hoop.rim.barY - b.r*0.25;
         const dx=rimCx-b.x, dy=rimTopY-b.y, len=Math.hypot(dx,dy)||1;
         const ax=(dx/len)*Math.hypot(vx,vy), ay=(dy/len)*Math.hypot(vx,vy);
-        const a=Config.shooting.aimAssist;
-        vx = vx*(1-a) + ax*a;
-        vy = vy*(1-a) + ay*a;
+        const a=Config.shooting.aimAssist; vx=vx*(1-a)+ax*a; vy=vy*(1-a)+ay*a;
       }
 
-      // [MOD:ARC_GUARANTEE] — 최소 포물선 보장: 림 위까지 올라갈 vy_min 확보
+      // 최소 포물선 보장 (림 위로 올라가도록)
       const clearance = b.r * Config.shooting.clearMarginR + 10;
       const targetY   = Game.hoop.rim.barY - clearance;
-      const needH     = Math.max(0, b.y - targetY); // 아래 좌표계이므로 b.y > targetY면 양수
+      const needH     = Math.max(0, b.y - targetY);
       const vyMin     = Math.sqrt(2 * Config.physics.gravity * needH) * (Config.shooting.minVyBoost || 1);
       if (-vy < vyMin) vy = -vyMin;
 
@@ -467,10 +463,10 @@
     const b=Game.ball; if(!b) return;
     b.lastY=b.y; b.apply(dt);
 
-    // 레이어 전환(위로 넘겼는지, 내려오며 내부로 진입했는지)
+    // 레이어 전환
     updateDepthLayer(b);
 
-    // 득점 먼저(원웨이 충돌로 막히지 않도록)
+    // 득점 먼저 (원웨이 충돌로 막히지 않도록)
     if (b.shot && checkGoal(b)){
       State.score += 1; scoreEl.textContent=String(State.score);
       showToast('GOAL!', '#38ff9b');
@@ -478,21 +474,27 @@
       return;
     }
 
-    // [MOD:INSTANT_RESET_ON_FLOOR] — 슛 후 바닥 닿으면 즉시 FAIL + 즉시 리스폰
+    // [MOD:INSTANT_RESET_OUT_OF_BOUNDS] — 장외 즉시 리셋
+    if (b.shot && !b.scored){
+      const m = Config.reset.oobMargin;
+      const oob = (b.x + b.r < -m) || (b.x - b.r > WORLD.w + m) ||
+                  (b.y + b.r < -m) || (b.y - b.r > WORLD.h + m);
+      if (oob){
+        showToast('FAIL', '#ffd166');
+        placeBallOnFloor(); // 즉시 새 공
+        return;
+      }
+    }
+
+    // [MOD:INSTANT_RESET_ON_FLOOR] — 슛 후 바닥 접촉 즉시 리셋
     if (b.shot && !b.scored && b.hitFloor){
       showToast('FAIL', '#ffd166');
-      placeBallOnFloor(); // 지연 없이 즉시 새 공
+      placeBallOnFloor();
       return;
     }
 
     // 림 충돌
     if (b.shot) collideHoop(b);
-
-    // (보호용) 다른 실패 조건 — 이론상 위의 즉시 리셋으로 잘 안 옴
-    if ((b.y - b.r > WORLD.h + 140) || (b.shot && b.resting && b.timeSinceShot>0.25)){
-      showToast('FAIL', '#ffd166');
-      setTimeout(()=>placeBallOnFloor(), 0);
-    }
   }
 
   // scene cover draw (비율 유지)
