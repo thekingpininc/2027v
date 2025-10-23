@@ -1,14 +1,8 @@
 (() => {
   'use strict';
 
-  /* =========================================
-     고정 월드 좌표계 (가로 기준, 상/하단 고정)
-     - 캔버스 CSS로 높이를 100vh에 맞추고
-       JS에서 가로폭을 height 비율로 맞춤.
-  ========================================= */
   const WORLD = { w: 1920, h: 1080 }; // 16:9 기준
 
-  // ---------- DOM ----------
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   const scoreEl = document.getElementById('score');
@@ -18,17 +12,14 @@
   const startBtn = document.getElementById('startBtn');
   const restartBtn = document.getElementById('restart');
 
-  // ---------- 설정 ----------
   const Config = {
     roundSeconds: 10,
-    // 에셋 경로
     assets: {
       background: (window.GAME_ASSETS && window.GAME_ASSETS.background) || null,
       backboard:  (window.GAME_ASSETS && window.GAME_ASSETS.backboard)  || null,
       rim:        (window.GAME_ASSETS && window.GAME_ASSETS.rim)        || null,
       ball:       (window.GAME_ASSETS && window.GAME_ASSETS.ball)       || null,
     },
-    // 배치 (이미지에 맞춘 기본값) — 필요시 미세조정
     layout: {
       backboardW: 0.52,   // 백보드 화면 너비 비율(1920 기준)
       backboardTop: 0.12, // 백보드 상단 Y 비율
@@ -37,7 +28,6 @@
       rimOffsetX: 0.00,   // 백보드 중심에서 림 중심 X 오프셋(+우, -좌)
       rimY: 0.40          // 화면 높이 기준 림 중심 Y 비율 (빨간 바 중앙)
     },
-    // 물리/입력(쉬운 슈팅 세팅)
     physics: {
       gravity: 2800,        // px/s^2
       air: 0.999,
@@ -49,16 +39,13 @@
       powerDrag: 7.0,
       minUpVy: -60          // 위로 슛 인식 임계값(절댓값 작게 = 쉽게)
     },
-    // 득점判定(조금 관대하게)
     scoring: {
       lineOffset: 6,        // 빨간바 아래쪽으로 판정라인 내림(px, 월드좌표)
       expandX: 16           // 좌우로 판정폭 확장(px)
     },
-    // 재스폰 지연
     respawnDelayMs: 300
   };
 
-  // ---------- 상태 ----------
   const State = {
     dpr: 1, scale: 1,
     running: false,
@@ -68,7 +55,6 @@
     msgTimeout: 0
   };
 
-  // ---------- 에셋 ----------
   const Assets = {
     background: null, backboard: null, rim: null, ball: null,
     ready: { bg:false, bb:false, rim:false, ball:false }
@@ -86,71 +72,59 @@
   Assets.rim        = loadImage(Config.assets.rim,        ok => Assets.ready.rim  = ok);
   Assets.ball       = loadImage(Config.assets.ball,       ok => Assets.ready.ball = ok);
 
-  // ---------- 게임 객체 ----------
   const Game = {
     ball: null,
     hoop: null,
     input: null
   };
 
-  // 헬퍼
   const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
   const now = ()=>performance.now();
 
-  // ---------- 캔버스 리사이즈 (상/하단 고정) ----------
   function resize() {
-    // 화면의 높이에 맞춰 스케일 결정(상/하단 유지)
     State.dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-    const cssH = window.innerHeight;                  // 항상 화면 높이
-    const scale = cssH / WORLD.h;                     // 월드→CSS 스케일
+    const cssH = window.innerHeight;              
+    const scale = cssH / WORLD.h;                  
     const cssW = Math.round(WORLD.w * scale);
 
-    // 캔버스 픽셀 크기(레티나)
     canvas.width  = Math.round(WORLD.w * State.dpr);
     canvas.height = Math.round(WORLD.h * State.dpr);
 
-    // CSS 사이즈: 높이는 100vh, 가로는 비율에 맞춤(좌우 잘릴 수 있음)
     canvas.style.width  = cssW + 'px';
     canvas.style.height = cssH + 'px';
 
     State.scale = scale;
 
-    // 림/보드 재계산 및 공 리스폰 포지션
     buildHoop();
-    if (!Game.ball) spawnBall(); else placeBallOnFloor(); // 하단 중앙 위치 보정
+    if (!Game.ball) spawnBall(); else placeBallOnFloor(); 
   }
 
-  // ---------- 림/보드 배치 ----------
   function buildHoop() {
     const cx = WORLD.w * 0.5;
     const bbW = WORLD.w * Config.layout.backboardW;
-    const bbH = bbW * 0.75; // backboard2.png 비율에 맞춤(대략)
+    const bbH = bbW * 0.75;
     const bbX = cx - bbW/2;
     const bbY = WORLD.h * Config.layout.backboardTop;
 
-    // 림 가로
     const rimW = WORLD.w * Config.layout.rimW;
-    const rimH = rimW * 0.45; // rim.png 비율감(빨간바+네트 포함) 대략
+    const rimH = rimW * 0.45;
     const rimX = cx - rimW/2 + (bbW * Config.layout.rimOffsetX);
     const rimY = WORLD.h * Config.layout.rimY - rimH/2; // rim.png 중앙 기준
 
-    // 물리용 림 바/노드
-    const barY = rimY + rimH * 0.09;        // 빨간바 중앙 근처
-    const openLeft  = rimX + rimW * 0.09;   // 모서리 둥근 부분 제외
+    const barY = rimY + rimH * 0.09;      
+    const openLeft  = rimX + rimW * 0.09;  
     const openRight = rimX + rimW * 0.91;
-    const rimNodeR  = (openRight - openLeft) * 0.03; // 노드 반경
+    const rimNodeR  = (openRight - openLeft) * 0.03; 
 
     Game.hoop = {
       board: { x: bbX, y: bbY, w: bbW, h: bbH },
       rim:   { x: rimX, y: rimY, w: rimW, h: rimH, barY, openLeft, openRight, nodeR: rimNodeR },
-      // 득점 판정선(빨간바 바로 아래, 약간 관대)
       scoreY: barY + Config.scoring.lineOffset,
       scoreLeft: openLeft - Config.scoring.expandX,
       scoreRight: openRight + Config.scoring.expandX
     };
   }
 
-  // ---------- 공 ----------
   class Ball {
     constructor(x, y, r) {
       this.x=x; this.y=y; this.r=r;
@@ -160,18 +134,15 @@
     }
     apply(dt) {
       if (this.held) return;
-      // 중력/감쇠
       this.vy += Config.physics.gravity * dt;
       this.vx *= Math.pow(Config.physics.air, dt*120);
       this.vy *= Math.pow(Config.physics.air, dt*120);
 
       this.x += this.vx*dt; this.y += this.vy*dt;
 
-      // 좌우 벽
       if (this.x - this.r < 0) { this.x=this.r; this.vx=Math.abs(this.vx)*Config.physics.wallRest; }
       if (this.x + this.r > WORLD.w) { this.x=WORLD.w-this.r; this.vx=-Math.abs(this.vx)*Config.physics.wallRest; }
 
-      // 바닥
       if (this.y + this.r > WORLD.h) {
         this.y = WORLD.h - this.r;
         if (this.vy > 0) this.vy = -this.vy * Config.physics.floorRest;
@@ -210,10 +181,8 @@
     b.vx = 0; b.vy = 0; b.held=false; b.shot=false; b.resting=false; b.scored=false; b.timeSinceShot=0;
   }
 
-  // ---------- 림 충돌 & 득점 ----------
   function collideHoop(ball) {
     const {rim} = Game.hoop;
-    // 림 바(수평 캡슐) 충돌
     const hitCapsule = (ax, ay, bx, by, r) => {
       const vx=bx-ax, vy=by-ay;
       const wx=ball.x-ax, wy=ball.y-ay;
@@ -233,7 +202,6 @@
         ball.vx*=0.985; ball.vy*=0.985;
       }
     };
-    // 노드 충돌(양끝)
     const hitNode = (cx,cy,r)=>{
       const dx=ball.x-cx, dy=ball.y-cy, dist=Math.hypot(dx,dy), min=ball.r+r;
       if (dist<min){
@@ -264,7 +232,6 @@
     return false;
   }
 
-  // ---------- 입력 ----------
   class Input {
     constructor(){
       this.active=false;
@@ -274,7 +241,6 @@
       window.addEventListener('pointerup',   this.onUp,   {passive:false});
     }
     toWorld(e){
-      // CSS → 월드 좌표 변환(상/하단 고정이므로 x만 스케일 보정)
       const rect=canvas.getBoundingClientRect();
       const cssX=(e.clientX-rect.left), cssY=(e.clientY-rect.top);
       const x= cssX / State.scale;
@@ -299,7 +265,6 @@
       if(!this.active) return;
       const p=this.toWorld(e); this.x=p.x; this.y=p.y; this.push(p.x,p.y);
       const b=Game.ball; if(b && b.held){
-        // 손가락에 살짝 붙도록 (바닥 아래로는 안 내려가게)
         b.x=this.x; b.y=Math.min(Math.max(this.y, WORLD.h*0.2), WORLD.h - b.r);
       }
     }
@@ -308,7 +273,6 @@
       this.active=false;
       const b=Game.ball; if(!(b && b.held)) return;
 
-      // 초기 속도 계산(스와이프 80% + 드래그 20% → 쉬움)
       const dragVX=(this.sx-this.x)*Config.physics.powerDrag;
       const dragVY=(this.sy-this.y)*Config.physics.powerDrag;
       let i=this.samples.length-1; const tLast=this.samples[i].t;
@@ -322,7 +286,6 @@
       let vx=dragVX*0.2 + swipeVX*0.8;
       let vy=dragVY*0.2 + swipeVY*0.8;
 
-      // 위로 던진 경우만 유효(임계값 완화로 쉽게)
       if (vy >= Config.physics.minUpVy) { vx=0; vy=0; }
 
       const spd=Math.hypot(vx,vy);
@@ -342,7 +305,6 @@
     }
   }
 
-  // ---------- 토스트 메시지 ----------
   function showToast(text, color='white'){
     toastEl.textContent=text; toastEl.style.color=color;
     toastEl.classList.add('show');
@@ -350,7 +312,6 @@
     State.msgTimeout = setTimeout(()=> toastEl.classList.remove('show'), 500);
   }
 
-  // ---------- 게임 루프 ----------
   function update(dt){
     if(State.running){
       State.timeLeft -= dt;
@@ -366,10 +327,8 @@
 
     b.lastY=b.y; b.apply(dt);
 
-    // 림 충돌(슛 상태일 때만)
     if (b.shot) for(let i=0;i<2;i++) collideHoop(b);
 
-    // 득점 체크
     if (b.shot && checkGoal(b)) {
       State.score += 1; scoreEl.textContent=String(State.score);
       showToast('GOAL!', '#38ff9b');
@@ -377,7 +336,6 @@
       return;
     }
 
-    // 실패 조건: 화면 아래로 크게 이탈 or 충분히 멈춤
     if ((b.y - b.r > WORLD.h + 180) || (b.shot && b.resting && b.timeSinceShot>0.25)) {
       showToast('FAIL', '#ffd166');
       setTimeout(()=>{ placeBallOnFloor(); }, Config.respawnDelayMs);
@@ -385,22 +343,17 @@
   }
 
   function render(){
-    // 픽셀→월드 스케일(DPR)
     ctx.setTransform(State.dpr,0,0,State.dpr,0,0);
-    // 클리어
     ctx.clearRect(0,0,WORLD.w,WORLD.h);
 
-    // 배경
     if (Assets.ready.bg && Assets.background) {
       ctx.drawImage(Assets.background, 0, 0, WORLD.w, WORLD.h);
     } else {
-      // 대체 배경
       const g=ctx.createLinearGradient(0,0,0,WORLD.h);
       g.addColorStop(0,'#143'); g.addColorStop(1,'#012');
       ctx.fillStyle=g; ctx.fillRect(0,0,WORLD.w,WORLD.h);
     }
 
-    // 백보드 + 림
     if (Game.hoop) {
       const {board, rim} = Game.hoop;
       if (Assets.ready.bb && Assets.backboard)
@@ -415,10 +368,8 @@
       // ctx.lineTo(Game.hoop.scoreRight, Game.hoop.scoreY); ctx.stroke();
     }
 
-    // 조준선
     Game.input && Game.input.drawAim(ctx);
 
-    // 공
     Game.ball && Game.ball.draw(ctx);
   }
 
@@ -437,7 +388,6 @@
     requestAnimationFrame(frame);
   }
 
-  // ---------- 시작/종료 ----------
   function startGame(){
     overlay.classList.remove('visible');
     restartBtn.classList.remove('hidden');
@@ -458,12 +408,10 @@
     overlay.querySelector('p').innerHTML = `득점: <strong>${State.score}</strong>개<br/>다시 도전해 보세요.`;
   }
 
-  // ---------- 이벤트 ----------
   window.addEventListener('resize', resize);
   startBtn.addEventListener('click', startGame);
   restartBtn.addEventListener('click', startGame);
 
-  // ---------- 초기화 ----------
   resize();
   overlay.classList.add('visible');
 })();
