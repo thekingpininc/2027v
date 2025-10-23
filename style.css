@@ -1,8 +1,6 @@
 :root{
-  --text:#eef2f7;
-  --panel:rgba(0,0,0,.35);
-  --panelBorder:rgba(255,255,255,.18);
-  --shadow:rgba(0,0,0,.50);
+  --text:#eef2f7; --panel:rgba(0,0,0,.35);
+  --panelBorder:rgba(255,255,255,.18); --shadow:rgba(0,0,0,.50);
   --accent:#ff6a3d;
 }
 *{box-sizing:border-box}
@@ -12,33 +10,33 @@ body{
   font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Apple SD Gothic Neo,Helvetica,Arial,sans-serif;
 }
 
+/* 캔버스: 높이는 100vh 고정(상/하단이 꼭 맞게), 좌우는 잘려도 OK */
 #game{
-  position:fixed; left:50%; top:0;
-  transform:translateX(-50%);
-  height:100vh;
+  position:fixed; left:50%; top:0; transform:translateX(-50%);
+  height:100vh; display:block;
   touch-action:none; -webkit-user-select:none; user-select:none;
-  display:block;
 }
 
+/* HUD */
 #hud{
   position:fixed; left:0; right:0; top:10px;
   display:flex; gap:10px; justify-content:center; pointer-events:none;
 }
 .badge{
-  pointer-events:none;
-  padding:8px 12px; border-radius:999px; font-weight:800;
+  pointer-events:none; padding:8px 12px; border-radius:999px; font-weight:800;
   background:var(--panel); border:1px solid var(--panelBorder);
-  box-shadow:0 10px 24px var(--shadow); letter-spacing:.2px;
-  backdrop-filter: blur(6px);
+  box-shadow:0 10px 24px var(--shadow); letter-spacing:.2px; backdrop-filter: blur(6px);
 }
 
+/* 중앙 토스트 */
 #toast{
-  position:fixed; left:50%; top:45%; transform:translate(-50%,-50%);
+  position:fixed; left:50%; top:46%; transform:translate(-50%,-50%);
   padding:10px 14px; font-weight:900; font-size:28px; letter-spacing:.6px;
-  color:#fff; text-shadow:0 4px 10px rgba(0,0,0,.45); opacity:0; transition:.25s ease;
+  color:#fff; text-shadow:0 4px 10px rgba(0,0,0,.45); opacity:0; transition:.22s ease;
 }
 #toast.show{ opacity:1 }
 
+/* 오버레이 */
 #overlay{
   position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
   background:linear-gradient(to bottom, rgba(0,0,0,.55), rgba(0,0,0,.35));
