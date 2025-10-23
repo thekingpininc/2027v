@@ -10,7 +10,7 @@ body{
   font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Apple SD Gothic Neo,Helvetica,Arial,sans-serif;
 }
 
-/* 캔버스: 높이는 100vh 고정(상/하단이 꼭 맞게), 좌우는 잘려도 OK */
+/* 세로(높이) 고정 피팅: 상/하단은 100vh에 딱 맞춤 */
 #game{
   position:fixed; left:50%; top:0; transform:translateX(-50%);
   height:100vh; display:block;
