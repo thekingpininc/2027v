@@ -3,28 +3,35 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Swipe Hoops</title>
+  <title>Air Toss Hoops</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <canvas id="game" aria-label="농구 게임 캔버스" role="img"></canvas>
 
-  <!-- 점수/타이머 HUD -->
   <div id="hud" aria-live="polite">
     <div class="badge"><strong id="score">0</strong> 점</div>
-    <div class="badge"><strong id="timer">60</strong> 초</div>
+    <div class="badge"><strong id="timer">20</strong> 초</div>
   </div>
 
-  <!-- 시작/게임오버 오버레이 -->
   <div id="overlay" class="visible">
-    <h1>SWIPE HOOPS</h1>
-    <p>공을 눌러 위로 스와이프해서 슛!<br/>제한 시간 안에 최대한 많은 골을 넣어보세요.</p>
+    <h1>Air Toss Hoops</h1>
+    <p>
+      허공에서 오는 공을 <strong>하단 영역</strong>에서 잡고<br />
+      <strong>위로 튕겨</strong> 림 안에 넣어보세요!<br />
+      20초 동안 최대한 많이 득점하세요.
+    </p>
     <button id="startBtn">게임 시작</button>
   </div>
 
-  <!-- 재시작 버튼 (진행 중 우하단) -->
   <button id="restart" class="hidden">다시 시작</button>
 
+  <script>
+    window.GAME_ASSETS = {
+      backboard: 'assets/backboard.png',
+      ball: 'assets/ball.png'
+    };
+  </script>
   <script defer src="main.js"></script>
 </body>
 </html>
