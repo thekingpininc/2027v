@@ -2,24 +2,26 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Air Toss Hoops</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <title>Quick Shot Hoops</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <canvas id="game" aria-label="농구 게임 캔버스" role="img"></canvas>
 
   <div id="hud" aria-live="polite">
-    <div class="badge"><strong id="score">0</strong> 점</div>
-    <div class="badge"><strong id="timer">20</strong> 초</div>
+    <div class="badge">⏱ <strong id="timer">10</strong>s</div>
+    <div class="badge">🏀 <strong id="score">0</strong></div>
   </div>
 
+  <div id="toast"></div>
+
   <div id="overlay" class="visible">
-    <h1>Air Toss Hoops</h1>
+    <h1>Quick Shot Hoops</h1>
     <p>
-      허공에서 오는 공을 <strong>하단 영역</strong>에서 잡고<br />
-      <strong>위로 튕겨</strong> 림 안에 넣어보세요!<br />
-      20초 동안 최대한 많이 득점하세요.
+      하단 중앙의 공을 <strong>끌어올려 던지기</strong>!<br/>
+      백보드와 림 사이를 <strong>위→아래</strong>로 통과하면 <strong>GOAL</strong>입니다.<br/>
+      10초 안에 최대한 많이 넣어보세요.
     </p>
     <button id="startBtn">게임 시작</button>
   </div>
@@ -28,8 +30,10 @@
 
   <script>
     window.GAME_ASSETS = {
-      backboard: 'assets/backboard.png',
-      ball: 'assets/ball.png'
+      background: 'assets/background.png',
+      backboard:  'assets/backboard2.png',
+      rim:        'assets/rim.png',
+      ball:       'assets/ball.png'
     };
   </script>
   <script defer src="main.js"></script>
