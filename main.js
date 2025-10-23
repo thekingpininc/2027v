@@ -16,49 +16,52 @@
   const startBtn = document.getElementById('startBtn');
   const restartBtn = document.getElementById('restart');
 
-  // ---- Config
+  // ---- Config (이 scene.png에 맞춘 기본값 포함)
   const Config = {
     roundSeconds: 10,
 
     // 하단 1/2에서만 플릭 시작 + 임계값
     input: {
       startZoneRatio: 0.5,
-      minSwipeUpVy: -90,     // 위로 던진 최소 vy(더 작게=쉽게)
-      minSwipeSpeed: 550     // 최소 스와이프 속도(px/s)
+      minSwipeUpVy: -90,     // 위로 던졌다고 볼 최소 vy(절댓값 작을수록 쉬움)
+      minSwipeSpeed: 550     // 최소 스와이프 평균 속도(px/s)
     },
 
-    // Scene + Rim + Ball
+    // 씬 + 림 + 공
     assets: {
       scene: (window.GAME_ASSETS && window.GAME_ASSETS.scene) || null,
       rim:   (window.GAME_ASSETS && window.GAME_ASSETS.rim)   || null,
       ball:  (window.GAME_ASSETS && window.GAME_ASSETS.ball)  || null,
     },
 
-    // ---- 씬 기준 림 위치/크기(씬 원본 이미지 좌표에 대한 비율 값)
+    // 씬(원본 이미지 좌표의 %) 기준 림 위치/크기 —— 본 scene.png용 추천값
     sceneLayout: {
-      rimCxPct: 0.500,  // 림 빨간바 중심의 X(씬 가로 대비 0~1)  ← 필요시 미세조정
-      rimCyPct: 0.455,  // 림 빨간바 중심의 Y(씬 세로 대비 0~1)  ← 필요시 미세조정
-      rimWidthPctOfWorld: 0.22 // 림 가로폭(월드 너비 대비 비율)
+      rimCxPct: 0.500,          // X: 씬 가로의 50% (중앙)
+      rimCyPct: 0.458,          // Y: 씬 세로의 45.8% (빨간바 중앙)
+      rimWidthPctOfWorld: 0.205 // 림 가로폭(월드 가로 대비)
     },
 
-    // 림 PNG 내부 상대 위치(빨간바/오픈영역) — rim.png가 바뀌면 이 값만 조정
+    // rim.png 내부 상대 위치(빨간바/오픈영역)
     rimImage: {
-      barCenterRelY: 0.12,  // rim.png 상단 기준 빨간바 중심 비율
-      openLeftRel:   0.24,  // 림 내부 좌/우 경계(0~1)
-      openRightRel:  0.76
+      barCenterRelY: 0.12,  // rim.png 상단 기준 빨간바 중심
+      openLeftRel:   0.20,  // 골대 내부 좌/우 경계 (관대)
+      openRightRel:  0.80
     },
 
+    // 물리
     physics: {
       gravity: 2800, air: 0.999,
       wallRest: 0.70, floorRest: 0.55, rimRest: 0.78,
       powerSwipe: 1100, powerDrag: 7.0, maxShotPower: 1900
     },
 
+    // 득점 판정(빨간바 바로 아래 가상선)
     scoring: {
-      lineOffset: 6,  // 빨간바 중심에서 아래쪽으로 내린 가상선
+      lineOffset: 6,  // 빨간바 중심에서 아래로
       expandX: 18     // 좌우 여유(관대)
     },
 
+    // 리스폰
     respawnDelayMs: 220
   };
 
@@ -70,9 +73,8 @@
     score: 0,
     lastRAF: 0, acc: 0, fixedDt: 1/120,
     msgTimeout: 0,
-
-    // 씬(cover) 매핑: 원본 이미지 → 월드 좌표
-    sceneMap: { scale: 1, dx: 0, dy: 0, iw: 0, ih: 0 }
+    // 씬 커버 매핑
+    sceneMap: { scale:1, dx:0, dy:0, iw:0, ih:0 }
   };
 
   // ---- Assets
@@ -84,13 +86,14 @@
   function loadImage(path, on){ if(!path) return null; const img=new Image(); img.src=path; img.onload=()=>on(true,img); img.onerror=()=>on(false,img); return img; }
 
   Assets.scene = loadImage(Config.assets.scene, (ok,img)=>{
-    Assets.ready.scene = ok; if(ok){ State.sceneMap.iw = img.naturalWidth; State.sceneMap.ih = img.naturalHeight; }
-    resize(); // 씬 로드 후 커버 매핑 갱신
+    Assets.ready.scene = ok;
+    if (ok){ State.sceneMap.iw = img.naturalWidth; State.sceneMap.ih = img.naturalHeight; }
+    resize(); // 씬 로드 후 매핑 갱신
   });
   Assets.rim   = loadImage(Config.assets.rim, (ok,img)=>{
-    Assets.ready.rim = ok; if(ok && img.naturalWidth){ Assets.rimRatio = img.naturalHeight / img.naturalWidth; }
-    buildHoop(); // 림 비율 반영
-    render();
+    Assets.ready.rim = ok;
+    if (ok && img.naturalWidth) Assets.rimRatio = img.naturalHeight / img.naturalWidth;
+    buildHoop(); render();
   });
   Assets.ball  = loadImage(Config.assets.ball, ok=>{ Assets.ready.ball = ok; });
 
@@ -101,26 +104,24 @@
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
   const now = ()=>performance.now();
 
-  // 씬 이미지를 월드에 "cover"로 넣을 때의 매핑
+  // 씬 이미지를 월드에 'cover'로 매핑
   function computeSceneMap(){
     const iw = State.sceneMap.iw || 1920, ih = State.sceneMap.ih || 1080;
     const s  = Math.max(WORLD.w/iw, WORLD.h/ih);
     const dw = iw*s, dh = ih*s;
     State.sceneMap.scale = s;
-    State.sceneMap.dx = (WORLD.w - dw)/2;
-    State.sceneMap.dy = (WORLD.h - dh)/2;
+    State.sceneMap.dx = (WORLD.w - dw) / 2;
+    State.sceneMap.dy = (WORLD.h - dh) / 2;
   }
-
-  // 씬 원본 픽셀 좌표(u,v)를 월드 좌표(x,y)로
-  function sceneUVtoWorld(u, v){
-    const M = State.sceneMap;
-    return { x: M.dx + u * M.scale, y: M.dy + v * M.scale };
+  // 씬 원본 픽셀(u,v) → 월드(x,y)
+  function sceneUVtoWorld(u,v){
+    const M = State.sceneMap; return { x: M.dx + u*M.scale, y: M.dy + v*M.scale };
   }
 
   // ---- Resize / Layout
   function resize(){
     State.dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-    const cssH = window.innerHeight;
+    const cssH = window.innerHeight;                 // 상/하단 고정
     const scale = cssH / WORLD.h;
     const cssW = Math.round(WORLD.w * scale);
 
@@ -138,17 +139,16 @@
   }
 
   function buildHoop(){
-    // 씬 좌표(%) → 원본 픽셀 → 월드 좌표
-    const rimCx_u = (State.sceneMap.iw || 1920) * Config.sceneLayout.rimCxPct;
-    const rimCy_v = (State.sceneMap.ih || 1080) * Config.sceneLayout.rimCyPct;
-    const rimCenter = sceneUVtoWorld(rimCx_u, rimCy_v);
+    // 씬 기준 림 중심 좌표
+    const u = (State.sceneMap.iw || 1920) * Config.sceneLayout.rimCxPct;
+    const v = (State.sceneMap.ih || 1080) * Config.sceneLayout.rimCyPct;
+    const rimCenter = sceneUVtoWorld(u, v);
 
     const rimW = WORLD.w * Config.sceneLayout.rimWidthPctOfWorld;
     const rimH = rimW * (Assets.rimRatio || 0.45);
     const rimX = rimCenter.x - rimW/2;
     const rimY = rimCenter.y - rimH * Config.rimImage.barCenterRelY;
 
-    // 림 내부 오픈 구간(X) — rim.png 내부 상대 좌표 활용
     const openLeft  = rimX + rimW * Config.rimImage.openLeftRel;
     const openRight = rimX + rimW * Config.rimImage.openRightRel;
     const barY      = rimY + rimH * Config.rimImage.barCenterRelY;
@@ -202,13 +202,13 @@
     b.x=WORLD.w*0.5; b.y=WORLD.h*0.86; b.vx=b.vy=0; b.held=false; b.shot=false; b.resting=false; b.scored=false; b.timeSinceShot=0;
   }
 
-  // ---- Collision (one-way) & scoring
+  // ---- Collision(원웨이) & scoring
   function collideHoop(ball){
     const rim = Game.hoop.rim;
     const inGoalX = (ball.x > Game.hoop.scoreLeft && ball.x < Game.hoop.scoreRight);
-
-    // 빨간바: 득점 구간 + 아래로 통과 중이면 충돌 비활성화(원웨이)
+    // 득점 구간 + 아래로 통과 중일 때는 바 충돌을 비활성화(원웨이 패스)
     const shouldCollideBar = (ball.vy < 0) || !inGoalX;
+
     if (shouldCollideBar){
       const ax=rim.openLeft, ay=rim.barY, bx=rim.openRight, by=rim.barY;
       const r = rim.nodeR*0.55;
@@ -225,7 +225,6 @@
         ball.vx*=0.985; ball.vy*=0.985;
       }
     }
-
     // 양 끝 노드
     const hitNode=(cx,cy,rn)=>{
       const dx=ball.x-cx, dy=ball.y-cy; const dist=Math.hypot(dx,dy), min=ball.r+rn;
@@ -251,7 +250,7 @@
     return false;
   }
 
-  // ---- Input (하단 1/2 시작 + 드래그 상한: 림 위로 못 올라감)
+  // ---- Input (하단 1/2 시작 + 림 위로 드래그 금지)
   class Input{
     constructor(){ this.active=false; this.sx=0; this.sy=0; this.x=0; this.y=0; this.samples=[];
       canvas.addEventListener('pointerdown', this.onDown, {passive:false});
@@ -264,13 +263,20 @@
 
     onDown=(e)=>{ e.preventDefault(); if(!State.running) return;
       const p=this.toWorld(e);
-      if (p.y < WORLD.h * (1 - Config.input.startZoneRatio)) return; // 하단 1/2에서만
-      if (this.withinBall(p.x,p.y)){ this.active=true; this.sx=this.x=p.x; this.sy=this.y=p.y; this.samples.length=0; this.push(p.x,p.y);
-        const b=Game.ball; b.held=true; b.resting=false; }
+      if (p.y < WORLD.h * (1 - Config.input.startZoneRatio)) return; // 하단 1/2에서만 시작
+      if (this.withinBall(p.x,p.y)){
+        this.active=true; this.sx=this.x=p.x; this.sy=this.y=p.y; this.samples.length=0; this.push(p.x,p.y);
+        const b=Game.ball; b.held=true; b.resting=false;
+      }
     }
 
     onMove=(e)=>{ if(!this.active) return; const p=this.toWorld(e); this.x=p.x; this.y=p.y; this.push(p.x,p.y);
-      const b=Game.ball; if(b && b.held){ b.x=this.x; const minY=Math.max(WORLD.h*0.5, Game.hoop.rim.barY + b.r + 8); b.y=clamp(this.y, minY, WORLD.h - b.r); } }
+      const b=Game.ball; if(b && b.held){
+        b.x = this.x;
+        // 림 빨간바보다 위로는 절대 올릴 수 없게 (플릭 조준 난이도 안정화)
+        const minY = Math.max(WORLD.h*0.5, Game.hoop.rim.barY + b.r + 12);
+        b.y = clamp(this.y, minY, WORLD.h - b.r);
+      } }
 
     onUp=(e)=>{ if(!this.active) return; this.active=false; const b=Game.ball; if(!(b && b.held)) return;
       // 최근 120ms 스와이프
@@ -288,7 +294,7 @@
       let vx=dragVX*0.2 + swipeVX*0.8;
       let vy=dragVY*0.2 + swipeVY*0.8;
 
-      // 위로 + 최소 속도
+      // 위로 던진 제스처 + 최소 속도 조건
       if (vy >= Config.input.minSwipeUpVy || speed < Config.input.minSwipeSpeed){ vx=0; vy=0; }
 
       const spd=Math.hypot(vx,vy); if (spd > Config.physics.maxShotPower){ const s=Config.physics.maxShotPower/(spd||1); vx*=s; vy*=s; }
@@ -296,7 +302,8 @@
     }
 
     push(x,y){ this.samples.push({x,y,t:now()}); const cut=now()-180; while(this.samples.length && this.samples[0].t<cut) this.samples.shift(); }
-    drawAim(g){ if(!this.active) return; g.save(); g.strokeStyle='rgba(255,255,255,.8)'; g.lineWidth=2; g.setLineDash([6,6]); g.beginPath(); g.moveTo(this.sx,this.sy); g.lineTo(this.x,this.y); g.stroke(); g.restore(); }
+    drawAim(g){ if(!this.active) return; g.save(); g.strokeStyle='rgba(255,255,255,.8)'; g.lineWidth=2; g.setLineDash([6,6]);
+      g.beginPath(); g.moveTo(this.sx,this.sy); g.lineTo(this.x,this.y); g.stroke(); g.restore(); }
   }
 
   // ---- Toast
@@ -311,14 +318,14 @@
     const b=Game.ball; if(!b) return;
     b.lastY=b.y; b.apply(dt);
 
-    // 득점 먼저 판정 → 충돌(원웨이) 순으로
+    // 득점 먼저 판정 → 그 다음 충돌(원웨이)
     if (b.shot && checkGoal(b)){
       State.score += 1; scoreEl.textContent=String(State.score);
       showToast('GOAL!', '#38ff9b'); setTimeout(()=>placeBallOnFloor(), Config.respawnDelayMs); return;
     }
-
     if (b.shot) collideHoop(b);
 
+    // 실패(크게 이탈 or 충분히 멈춤)
     if ((b.y - b.r > WORLD.h + 140) || (b.shot && b.resting && b.timeSinceShot>0.25)){
       showToast('FAIL', '#ffd166'); setTimeout(()=>placeBallOnFloor(), Config.respawnDelayMs);
     }
@@ -330,15 +337,17 @@
       const g=ctx.createLinearGradient(0,0,0,WORLD.h); g.addColorStop(0,'#163d6b'); g.addColorStop(1,'#0c1220');
       ctx.fillStyle=g; ctx.fillRect(0,0,WORLD.w,WORLD.h); return;
     }
-    const M = State.sceneMap, img = Assets.scene;
-    const iw = img.naturalWidth || 1920, ih = img.naturalHeight || 1080;
-    const s  = Math.max(WORLD.w/iw, WORLD.h/ih);
-    const dw = iw*s, dh = ih*s;
-    const dx = (WORLD.w - dw)/2, dy = (WORLD.h - dh)/2;
-    // 기록(림 좌표 변환에 사용)
-    M.scale = s; M.dx = dx; M.dy = dy; M.iw=iw; M.ih=ih;
+    const img=Assets.scene;
+    const iw=img.naturalWidth || 1920, ih=img.naturalHeight || 1080;
+    const s=Math.max(WORLD.w/iw, WORLD.h/ih);
+    const dw=iw*s, dh=ih*s;
+    const dx=(WORLD.w-dw)/2, dy=(WORLD.h-dh)/2;
+    // 매핑 기록(림 좌표 변환 용)
+    State.sceneMap.scale=s; State.sceneMap.dx=dx; State.sceneMap.dy=dy; State.sceneMap.iw=iw; State.sceneMap.ih=ih;
+
     ctx.save(); ctx.beginPath(); ctx.rect(0,0,WORLD.w,WORLD.h); ctx.clip();
-    ctx.drawImage(img, dx, dy, dw, dh); ctx.restore();
+    ctx.drawImage(img, dx, dy, dw, dh);
+    ctx.restore();
   }
 
   function render(){
@@ -347,14 +356,14 @@
 
     drawSceneCover();
 
-    // 림
+    // 림(씬 위에 그려짐)
     if (Game.hoop && Assets.ready.rim && Assets.rim){
       const r = Game.hoop.rim;
       ctx.drawImage(Assets.rim, r.x, r.y, r.w, r.h);
-      // 디버그: 득점선/오픈영역 확인
-      // ctx.strokeStyle='rgba(255,0,0,.35)'; ctx.beginPath();
-      // ctx.moveTo(Game.hoop.scoreLeft, Game.hoop.scoreY);
-      // ctx.lineTo(Game.hoop.scoreRight, Game.hoop.scoreY); ctx.stroke();
+
+      // 디버그 가이드 — 필요시 주석 해제
+      // ctx.strokeStyle='rgba(255,0,0,.35)';
+      // ctx.beginPath(); ctx.moveTo(Game.hoop.scoreLeft, Game.hoop.scoreY); ctx.lineTo(Game.hoop.scoreRight, Game.hoop.scoreY); ctx.stroke();
     }
 
     Game.input && Game.input.drawAim(ctx);
@@ -387,6 +396,31 @@
     overlay.querySelector('h1').textContent='TIME UP!';
     overlay.querySelector('p').innerHTML=`득점: <strong>${State.score}</strong>개<br/>다시 도전해 보세요.`;
   }
+
+  // ---- Calib Mode(현장 미세조정): C 토글 / ←→↑↓ 위치 / A,D 크기 / [,] 오픈폭
+  let CAL = { on:false };
+  window.addEventListener('keydown', (e)=>{
+    if (e.key.toLowerCase() === 'c') { CAL.on = !CAL.on; showToast(CAL.on?'CAL ON':'CAL OFF', '#ffd166'); render(); }
+    if (!CAL.on) return;
+    const step = e.shiftKey ? 0.001 : 0.002;
+
+    if (e.key === 'ArrowLeft')  Config.sceneLayout.rimCxPct -= step;
+    if (e.key === 'ArrowRight') Config.sceneLayout.rimCxPct += step;
+    if (e.key === 'ArrowUp')    Config.sceneLayout.rimCyPct -= step;
+    if (e.key === 'ArrowDown')  Config.sceneLayout.rimCyPct += step;
+
+    if (e.key.toLowerCase() === 'a') Config.sceneLayout.rimWidthPctOfWorld -= step*0.8;
+    if (e.key.toLowerCase() === 'd') Config.sceneLayout.rimWidthPctOfWorld += step*0.8;
+
+    if (e.key === '[') { Config.rimImage.openLeftRel -= step;  Config.rimImage.openRightRel += step; }
+    if (e.key === ']') { Config.rimImage.openLeftRel += step;  Config.rimImage.openRightRel -= step; }
+
+    buildHoop(); render();
+
+    if (e.key.toLowerCase() === 's'){ // S: 현재값 콘솔에 출력(복사해서 고정)
+      console.log(JSON.stringify({sceneLayout:Config.sceneLayout, rimImage:Config.rimImage}, null, 2));
+    }
+  });
 
   // ---- Events / Init
   window.addEventListener('resize', resize);
