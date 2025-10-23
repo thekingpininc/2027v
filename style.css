@@ -34,29 +34,4 @@ body{
   font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Apple SD Gothic Neo,Helvetica,Arial,sans-serif;
 }
 
-/* 캔버스: 세로(높이) 100vh 고정. 좌우는 잘려도/여백 가능 */
-#game{
-  position:fixed; 
-  left:50%; 
-  top:0; 
-  transform:translateX(-50%);
-  height:100vh; 
-  display:block;
-  touch-action:none; 
-  -webkit-user-select:none; 
-  user-select:none;
-}
-
-/* ===== HUD (타이머/점수) ===== */
-#hud{
-  position:fixed; 
-  left:0; right:0; 
-  top:var(--hud-top);
-  display:flex; 
-  gap:var(--gap-hud); 
-  justify-content:center; 
-  pointer-events:none;
-}
-
-.badge{
-  po
+/* 캔버스: 세로(높이) 100vh 고정. 좌우는*
