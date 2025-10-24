@@ -78,7 +78,15 @@
       oobMargin: 120            // [MOD:INSTANT_RESET_OUT_OF_BOUNDS] 장외 여유(px)
     },
 
-    respawnDelayMs: 220         // Goal만 약간의 연출 딜레이
+    respawnDelayMs: 220,        // Goal만 약간의 연출 딜레이
+
+    // [MOD:SFX] 배경음/BGM + Goal 효과음
+    sfx: {
+      bgmUrl:  'assets/bgm.mp3',
+      goalUrl: 'assets/Goal.mp3',
+      bgmVolume: 0.28,   // 0.0 ~ 1.0
+      goalVolume: 0.9
+    }
   };
 
   // =========================
@@ -99,6 +107,28 @@
     ready: { scene:false, rim:false, ball:false },
     rimRatio: 0.45
   };
+
+  // [MOD:SFX] 오디오 핸들 (JS에서 직접 로드)
+  const SFX = {
+    bgm: null,
+    goal: null,
+    unlocked: false
+  };
+  (function initAudio(){
+    try {
+      if (Config.sfx.bgmUrl) {
+        SFX.bgm = new Audio(Config.sfx.bgmUrl);
+        SFX.bgm.loop = true;
+        SFX.bgm.volume = Config.sfx.bgmVolume;
+        SFX.bgm.preload = 'auto';
+      }
+      if (Config.sfx.goalUrl) {
+        SFX.goal = new Audio(Config.sfx.goalUrl);
+        SFX.goal.volume = Config.sfx.goalVolume;
+        SFX.goal.preload = 'auto';
+      }
+    } catch(_) {}
+  })();
 
   function loadImage(path, on){
     if(!path) return null;
@@ -149,7 +179,7 @@
     State.dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
     const cssH = window.innerHeight;
     const scale = cssH / WORLD.h;
-    const cssW = Math.round(WORLD.w * scale);   // ← 오타 수정됨
+    const cssW = Math.round(WORLD.w * scale);
 
     canvas.width  = Math.round(WORLD.w * State.dpr);
     canvas.height = Math.round(WORLD.h * State.dpr);
@@ -322,6 +352,14 @@
       canvas.addEventListener('pointerdown', this.onDown, {passive:false});
       window.addEventListener('pointermove', this.onMove, {passive:false});
       window.addEventListener('pointerup',   this.onUp,   {passive:false});
+
+      // 보조: 일부 WebView에서 pointerdown이 안 들어올 때 탭으로 시작
+      canvas.addEventListener('touchstart', (e)=>{
+        if (!State.running && overlay.classList.contains('visible')) {
+          e.preventDefault();
+          startGame();
+        }
+      }, { passive:false });
     }
     toWorld(e){
       const r=canvas.getBoundingClientRect();
@@ -450,6 +488,28 @@
     State.msgTimeout=setTimeout(()=>toastEl.classList.remove('show'),500);
   }
 
+  // [MOD:SFX] 오디오 재생 유틸
+  function playBGM(){
+    if (!SFX.bgm) return;
+    try {
+      const p = SFX.bgm.play();
+      if (p && typeof p.catch === 'function') p.catch(()=>{ /* autoplay 거부 시 무시 */ });
+    } catch(_) {}
+  }
+  function stopBGM(){
+    if (!SFX.bgm) return;
+    try { SFX.bgm.pause(); } catch(_) {}
+    try { SFX.bgm.currentTime = 0; } catch(_) {}
+  }
+  function playGoal(){
+    if (!SFX.goal) return;
+    try {
+      SFX.goal.currentTime = 0;
+      const p = SFX.goal.play();
+      if (p && typeof p.catch === 'function') p.catch(()=>{});
+    } catch(_) {}
+  }
+
   // =========================
   // Loop
   // =========================
@@ -469,12 +529,16 @@
     // 득점 먼저 (원웨이 충돌로 막히지 않도록)
     if (b.shot && checkGoal(b)){
       State.score += 1; scoreEl.textContent=String(State.score);
+
+      // [MOD:SFX] Goal 효과음
+      playGoal();
+
       showToast('GOAL!', '#38ff9b');
       setTimeout(()=>placeBallOnFloor(), Config.respawnDelayMs);
       return;
     }
 
-    // [MOD:INSTANT_RESET_OUT_OF_BOUNDS] — 장외 즉시 리셋
+    // 장외 즉시 리셋
     if (b.shot && !b.scored){
       const m = Config.reset.oobMargin;
       const oob = (b.x + b.r < -m) || (b.x - b.r > WORLD.w + m) ||
@@ -486,7 +550,7 @@
       }
     }
 
-    // [MOD:INSTANT_RESET_ON_FLOOR] — 슛 후 바닥 접촉 즉시 리셋
+    // 바닥 접촉 즉시 리셋
     if (b.shot && !b.scored && b.hitFloor){
       showToast('FAIL', '#ffd166');
       placeBallOnFloor();
@@ -557,6 +621,26 @@
   // =========================
   // Start / End
   // =========================
+  function unlockAudioOnce(){
+    if (SFX.unlocked) return;
+    // 사용자 제스처 컨텍스트 안에서 시도
+    try {
+      if (SFX.bgm) {
+        const p1 = SFX.bgm.play();
+        if (p1 && typeof p1.then === 'function') {
+          p1.then(()=>{ SFX.bgm.pause(); SFX.bgm.currentTime = 0; }).catch(()=>{});
+        } else { SFX.bgm.pause(); SFX.bgm.currentTime = 0; }
+      }
+      if (SFX.goal) {
+        const p2 = SFX.goal.play();
+        if (p2 && typeof p2.then === 'function') {
+          p2.then(()=>{ SFX.goal.pause(); SFX.goal.currentTime = 0; }).catch(()=>{});
+        } else { SFX.goal.pause(); SFX.goal.currentTime = 0; }
+      }
+    } catch(_) {}
+    SFX.unlocked = true;
+  }
+
   function startGame(){
     overlay.classList.remove('visible');
     restartBtn.classList.remove('hidden');
@@ -566,14 +650,23 @@
     State.lastRAF=0; State.acc=0;
     if(!Game.input) Game.input=new Input();
     placeBallOnFloor();
+
+    // [MOD:SFX] 오디오 언락 + BGM 재생
+    unlockAudioOnce();
+    playBGM();
+
     requestAnimationFrame(frame);
   }
+
   function endGame(){
     State.running=false;
     restartBtn.classList.add('hidden');
     overlay.classList.add('visible');
     overlay.querySelector('h1').textContent='TIME UP!';
     overlay.querySelector('p').innerHTML=`득점: <strong>${State.score}</strong>개<br/>다시 도전해 보세요.`;
+
+    // [MOD:SFX] 라운드 종료 시 BGM 잠시 멈춤(취향에 따라 유지해도 됨)
+    stopBGM();
   }
 
   // =========================
@@ -582,6 +675,13 @@
   window.addEventListener('resize', resize);
   startBtn.addEventListener('click', startGame);
   restartBtn.addEventListener('click', startGame);
+
+  // 모바일/일부 브라우저: 오버레이가 보이면 캔버스 탭만으로도 시작 가능
+  canvas.addEventListener('click', () => {
+    if (!State.running && overlay.classList.contains('visible')) {
+      startGame();
+    }
+  }, { passive:true });
+
   resize();
-  overlay.classList.add('visible');
-})();
+  overlay.classList.add('visi
