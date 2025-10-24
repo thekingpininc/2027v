@@ -277,11 +277,14 @@
   // =========================
 function collideHoop(ball){
   const rim = Game.hoop.rim;
+
+  // ✅ 림 위를 넘지 못했으면(짧은 플릭/아치 낮음) 충돌 아예 비활성화
+  if (!ball.clearedTop || ball.vy < 0) return;
+
   const inGoalX   = (ball.x > Game.hoop.scoreLeft && ball.x < Game.hoop.scoreRight);
-  const goingDown = (ball.vy >= 0); // ↓ 내려올 때만 충돌
 
   // --- 바(빨간 가로대) 충돌: 내려올 때 + 득점 코리도 밖에서만 ---
-  if (goingDown && !inGoalX){
+  if (!inGoalX){
     const ax=rim.openLeft, ay=rim.barY, bx=rim.openRight, by=rim.barY;
     const r = rim.nodeR * 0.55; // 바 두께 대용
     const vx=bx-ax, vy=by-ay, wx=ball.x-ax, wy=ball.y-ay;
@@ -299,7 +302,7 @@ function collideHoop(ball){
   }
 
   // --- 노드(양쪽 끝 원) 충돌: 역시 내려올 때 + 득점 코리도 밖에서만 ---
-  if (goingDown && !inGoalX){
+  if (!inGoalX){
     const hitNode=(cx,cy,rn)=>{
       const dx=ball.x-cx, dy=ball.y-cy; const dist=Math.hypot(dx,dy), min=ball.r+rn;
       if(dist<min){
