@@ -264,7 +264,7 @@
   // =========================
   function updateDepthLayer(ball){
     const rim = Game.hoop.rim;
-    const topLine = rim.barY - ball.r*0.35;
+    const topLine = rim.barY - ball.r*0.50;
     if (!ball.clearedTop && ball.y < topLine) ball.clearedTop = true;
     if (ball.clearedTop && ball.vy > 0 &&
         ball.x > Game.hoop.scoreLeft && ball.x < Game.hoop.scoreRight) {
@@ -278,12 +278,23 @@
 function collideHoop(ball){
   const rim = Game.hoop.rim;
 
-  // ✅ 림 위를 넘지 못했으면(짧은 플릭/아치 낮음) 충돌 아예 비활성화
+  // ✅ 림 위를 넘지 못했거나, 아직 상승 중이면 충돌 OFF
   if (!ball.clearedTop || ball.vy < 0) return;
 
-  const inGoalX   = (ball.x > Game.hoop.scoreLeft && ball.x < Game.hoop.scoreRight);
+  // ✅ 발사 직후 아주 짧은 순간엔(수치 흔들림 방지) 충돌 OFF
+  if (ball.timeSinceShot < 0.09) return; // 90ms 유예
 
-  // --- 바(빨간 가로대) 충돌: 내려올 때 + 득점 코리도 밖에서만 ---
+  // ✅ 림 "근처"가 아니면(충돌 의미 없음) 계산하지 않음
+  const xPad = Math.max(rim.nodeR * 1.2, ball.r * 0.8);
+  const yPad = ball.r * 1.35 + rim.nodeR * 0.7;
+  const nearX = (ball.x > rim.openLeft - xPad) && (ball.x < rim.openRight + xPad);
+  const nearY = Math.abs(ball.y - rim.barY) < yPad;
+  if (!(nearX && nearY)) return;
+
+  // 득점 통로 안쪽이면 계속 통과시킴
+  const inGoalX = (ball.x > Game.hoop.scoreLeft && ball.x < Game.hoop.scoreRight);
+
+  // --- 바(빨간 가로대) 충돌: 내려올 때 + 득점 코리도 밖 ---
   if (!inGoalX){
     const ax=rim.openLeft, ay=rim.barY, bx=rim.openRight, by=rim.barY;
     const r = rim.nodeR * 0.55; // 바 두께 대용
@@ -301,7 +312,25 @@ function collideHoop(ball){
     }
   }
 
-  // --- 노드(양쪽 끝 원) 충돌: 역시 내려올 때 + 득점 코리도 밖에서만 ---
+  // --- 노드(양쪽 원) 충돌: 내려올 때 + 득점 코리도 밖 ---
+  if (!inGoalX){
+    const hitNode=(cx,cy,rn)=>{
+      const dx=ball.x-cx, dy=ball.y-cy; const dist=Math.hypot(dx,dy), min=ball.r+rn;
+      if(dist<min){
+        const nx=dx/(dist||1e-6), ny=dy/(dist||1e-6), pen=min-dist;
+        ball.x+=nx*pen; ball.y+=ny*pen;
+        const vDot=ball.vx*nx+ball.vy*ny;
+        ball.vx = ball.vx - (1+Config.physics.rimRest)*vDot*nx;
+        ball.vy = ball.vy - (1+Config.physics.rimRest)*vDot*ny;
+        ball.vx*=0.985; ball.vy*=0.985;
+      }
+    };
+    hitNode(rim.openLeft,  rim.barY, rim.nodeR);
+    hitNode(rim.openRight, rim.barY, rim.nodeR);
+  }
+}
+
+ // --- 노드(양쪽 원) 충돌: 내려올 때 + 득점 코리도 밖 ---
   if (!inGoalX){
     const hitNode=(cx,cy,rn)=>{
       const dx=ball.x-cx, dy=ball.y-cy; const dist=Math.hypot(dx,dy), min=ball.r+rn;
