@@ -6,7 +6,7 @@
   // =========================
   const WORLD = { w: 1920, h: 1080 }; // 16:9
 
-  // [MOD:BOOTSTRAP_FIX] DOM 레퍼런스는 나중에 잡는다.
+  // DOM 레퍼런스는 DOMContentLoaded 후에 잡음(부트스트랩 안전화)
   let canvas, ctx, scoreEl, timerEl, toastEl, overlay, startBtn, restartBtn;
 
   // =========================
@@ -47,7 +47,7 @@
 
     physics: {
       gravity: 2800, air: 0.999,
-      wallRest: 0.70, floorRest: 0.55, rimRest: 0.76,
+      wallRest: 0.70, floorRest: 0.55, rimRest: 0.72,   // rimRest 약간 완화
       powerSwipe: 1400, powerDrag: 7.0, maxShotPower: 2600
     },
 
@@ -63,7 +63,7 @@
 
     respawnDelayMs: 220,
 
-    // [MOD:SFX_SAFE] 오디오 설정 (경로/볼륨 조정)
+    // BGM/Goal 사운드 (오디오 실패해도 게임은 진행)
     sfx: {
       bgmUrl:  'assets/bgm.mp3',
       goalUrl: 'assets/Goal.mp3',
@@ -91,31 +91,25 @@
     rimRatio: 0.45
   };
 
-  // [MOD:SFX_SAFE] 지연 초기화 오디오 핸들
+  // ----- 오디오 (지연 초기화 + 실패 무시) -----
   const SFX = { bgm:null, goal:null, ready:false };
-  function ensureSfx() {
+  function ensureSfx(){
     if (SFX.ready) return;
-    try {
-      if (Config.sfx.bgmUrl) {
+    try{
+      if (Config.sfx.bgmUrl){
         SFX.bgm = new Audio(Config.sfx.bgmUrl);
-        SFX.bgm.loop = true;
-        SFX.bgm.volume = Config.sfx.bgmVolume;
-        SFX.bgm.preload = 'auto';
+        SFX.bgm.loop = true; SFX.bgm.volume = Config.sfx.bgmVolume; SFX.bgm.preload='auto';
       }
-      if (Config.sfx.goalUrl) {
+      if (Config.sfx.goalUrl){
         SFX.goal = new Audio(Config.sfx.goalUrl);
-        SFX.goal.volume = Config.sfx.goalVolume;
-        SFX.goal.preload = 'auto';
+        SFX.goal.volume = Config.sfx.goalVolume; SFX.goal.preload='auto';
       }
       SFX.ready = true;
-    } catch (e) {
-      // 오디오 실패해도 게임은 계속
-      SFX.ready = false;
-    }
+    }catch(_){ SFX.ready = false; }
   }
-  function playBGM(){ try{ SFX.bgm && SFX.bgm.play().catch(()=>{});}catch(_){ } }
-  function stopBGM(){ try{ if(SFX.bgm){ SFX.bgm.pause(); SFX.bgm.currentTime=0; } }catch(_){ } }
-  function playGoal(){ try{ if(SFX.goal){ SFX.goal.currentTime=0; SFX.goal.play().catch(()=>{});} }catch(_){ } }
+  function playBGM(){ try{ SFX.bgm && SFX.bgm.play().catch(()=>{});}catch(_){} }
+  function stopBGM(){ try{ if(SFX.bgm){ SFX.bgm.pause(); SFX.bgm.currentTime=0; } }catch(_){} }
+  function playGoal(){ try{ if(SFX.goal){ SFX.goal.currentTime=0; SFX.goal.play().catch(()=>{});} }catch(_){} }
 
   // =========================
   // Utils
@@ -135,8 +129,7 @@
   Assets.scene = loadImage(Config.assets.scene, (ok,img)=>{
     Assets.ready.scene = ok;
     if (ok){ State.sceneMap.iw = img.naturalWidth; State.sceneMap.ih = img.naturalHeight; }
-    // [BOOTSTRAP_FIX] DOM 준비 전이면 resize가 no-op
-    resize();
+    resize(); // DOM 전이면 no-op
   });
   Assets.rim = loadImage(Config.assets.rim, (ok,img)=>{
     Assets.ready.rim = ok;
@@ -154,15 +147,14 @@
     State.sceneMap.dy = (WORLD.h - dh)/2;
   }
   function sceneUVtoWorld(u,v){
-    const M = State.sceneMap;
-    return { x: M.dx + u*M.scale, y: M.dy + v*M.scale };
+    const M = State.sceneMap; return { x: M.dx + u*M.scale, y: M.dy + v*M.scale };
   }
 
   // =========================
   // Layout / Resize (안전 가드)
   // =========================
   function resize(){
-    if (!canvas || !ctx) return; // [BOOTSTRAP_FIX]
+    if (!canvas || !ctx) return;
     State.dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
     const cssH = window.innerHeight;
     const scale = cssH / WORLD.h;
@@ -264,7 +256,7 @@
   // =========================
   function updateDepthLayer(ball){
     const rim = Game.hoop.rim;
-    const topLine = rim.barY - ball.r*0.50;
+    const topLine = rim.barY - ball.r*0.50; // 넘었다 판단 기준 상향(0.35→0.50)
     if (!ball.clearedTop && ball.y < topLine) ball.clearedTop = true;
     if (ball.clearedTop && ball.vy > 0 &&
         ball.x > Game.hoop.scoreLeft && ball.x < Game.hoop.scoreRight) {
@@ -275,78 +267,58 @@
   // =========================
   // Rim Collision & Scoring
   // =========================
-function collideHoop(ball){
-  const rim = Game.hoop.rim;
+  function collideHoop(ball){
+    const rim = Game.hoop.rim;
 
-  // ✅ 림 위를 넘지 못했거나, 아직 상승 중이면 충돌 OFF
-  if (!ball.clearedTop || ball.vy < 0) return;
+    // 림 위 넘기 전이거나 상승 중이면 충돌 OFF
+    if (!ball.clearedTop || ball.vy < 0) return;
+    // 발사 직후 90ms 유예
+    if (ball.timeSinceShot < 0.09) return;
 
-  // ✅ 발사 직후 아주 짧은 순간엔(수치 흔들림 방지) 충돌 OFF
-  if (ball.timeSinceShot < 0.09) return; // 90ms 유예
+    // 근접 구간에서만 충돌 검사
+    const xPad = Math.max(rim.nodeR * 1.2, ball.r * 0.8);
+    const yPad = ball.r * 1.35 + rim.nodeR * 0.7;
+    const nearX = (ball.x > rim.openLeft - xPad) && (ball.x < rim.openRight + xPad);
+    const nearY = Math.abs(ball.y - rim.barY) < yPad;
+    if (!(nearX && nearY)) return;
 
-  // ✅ 림 "근처"가 아니면(충돌 의미 없음) 계산하지 않음
-  const xPad = Math.max(rim.nodeR * 1.2, ball.r * 0.8);
-  const yPad = ball.r * 1.35 + rim.nodeR * 0.7;
-  const nearX = (ball.x > rim.openLeft - xPad) && (ball.x < rim.openRight + xPad);
-  const nearY = Math.abs(ball.y - rim.barY) < yPad;
-  if (!(nearX && nearY)) return;
+    const inGoalX = (ball.x > Game.hoop.scoreLeft && ball.x < Game.hoop.scoreRight);
 
-  // 득점 통로 안쪽이면 계속 통과시킴
-  const inGoalX = (ball.x > Game.hoop.scoreLeft && ball.x < Game.hoop.scoreRight);
+    // 바(빨간 가로대) 충돌: 내려올 때 + 득점 통로 밖
+    if (!inGoalX){
+      const ax=rim.openLeft, ay=rim.barY, bx=rim.openRight, by=rim.barY;
+      const r = rim.nodeR * 0.55;
+      const vx=bx-ax, vy=by-ay, wx=ball.x-ax, wy=ball.y-ay;
+      const vv=vx*vx+vy*vy || 1e-6; let t=(wx*vx+wy*vy)/vv; t=clamp(t,0,1);
+      const cx=ax+t*vx, cy=ay+t*vy;
+      const dx=ball.x-cx, dy=ball.y-cy; const dist=Math.hypot(dx,dy), min=ball.r+r;
+      if(dist<min){
+        const nx=dx/(dist||1e-6), ny=dy/(dist||1e-6), pen=min-dist;
+        ball.x+=nx*pen; ball.y+=ny*pen;
+        const vDot=ball.vx*nx+ball.vy*ny;
+        ball.vx = ball.vx - (1+Config.physics.rimRest)*vDot*nx;
+        ball.vy = ball.vy - (1+Config.physics.rimRest)*vDot*ny;
+        ball.vx*=0.985; ball.vy*=0.985;
+      }
+    }
 
-  // --- 바(빨간 가로대) 충돌: 내려올 때 + 득점 코리도 밖 ---
-  if (!inGoalX){
-    const ax=rim.openLeft, ay=rim.barY, bx=rim.openRight, by=rim.barY;
-    const r = rim.nodeR * 0.55; // 바 두께 대용
-    const vx=bx-ax, vy=by-ay, wx=ball.x-ax, wy=ball.y-ay;
-    const vv=vx*vx+vy*vy || 1e-6; let t=(wx*vx+wy*vy)/vv; t=clamp(t,0,1);
-    const cx=ax+t*vx, cy=ay+t*vy;
-    const dx=ball.x-cx, dy=ball.y-cy; const dist=Math.hypot(dx,dy), min=ball.r+r;
-    if(dist<min){
-      const nx=dx/(dist||1e-6), ny=dy/(dist||1e-6), pen=min-dist;
-      ball.x+=nx*pen; ball.y+=ny*pen;
-      const vDot=ball.vx*nx+ball.vy*ny;
-      ball.vx = ball.vx - (1+Config.physics.rimRest)*vDot*nx;
-      ball.vy = ball.vy - (1+Config.physics.rimRest)*vDot*ny;
-      ball.vx*=0.985; ball.vy*=0.985;
+    // 노드(양 끝 원) 충돌: 내려올 때 + 득점 통로 밖
+    if (!inGoalX){
+      const hitNode=(cx,cy,rn)=>{
+        const dx=ball.x-cx, dy=ball.y-cy; const dist=Math.hypot(dx,dy), min=ball.r+rn;
+        if(dist<min){
+          const nx=dx/(dist||1e-6), ny=dy/(dist||1e-6), pen=min-dist;
+          ball.x+=nx*pen; ball.y+=ny*pen;
+          const vDot=ball.vx*nx+ball.vy*ny;
+          ball.vx = ball.vx - (1+Config.physics.rimRest)*vDot*nx;
+          ball.vy = ball.vy - (1+Config.physics.rimRest)*vDot*ny;
+          ball.vx*=0.985; ball.vy*=0.985;
+        }
+      };
+      hitNode(rim.openLeft,  rim.barY, rim.nodeR);
+      hitNode(rim.openRight, rim.barY, rim.nodeR);
     }
   }
-
-  // --- 노드(양쪽 원) 충돌: 내려올 때 + 득점 코리도 밖 ---
-  if (!inGoalX){
-    const hitNode=(cx,cy,rn)=>{
-      const dx=ball.x-cx, dy=ball.y-cy; const dist=Math.hypot(dx,dy), min=ball.r+rn;
-      if(dist<min){
-        const nx=dx/(dist||1e-6), ny=dy/(dist||1e-6), pen=min-dist;
-        ball.x+=nx*pen; ball.y+=ny*pen;
-        const vDot=ball.vx*nx+ball.vy*ny;
-        ball.vx = ball.vx - (1+Config.physics.rimRest)*vDot*nx;
-        ball.vy = ball.vy - (1+Config.physics.rimRest)*vDot*ny;
-        ball.vx*=0.985; ball.vy*=0.985;
-      }
-    };
-    hitNode(rim.openLeft,  rim.barY, rim.nodeR);
-    hitNode(rim.openRight, rim.barY, rim.nodeR);
-  }
-}
-
- // --- 노드(양쪽 원) 충돌: 내려올 때 + 득점 코리도 밖 ---
-  if (!inGoalX){
-    const hitNode=(cx,cy,rn)=>{
-      const dx=ball.x-cx, dy=ball.y-cy; const dist=Math.hypot(dx,dy), min=ball.r+rn;
-      if(dist<min){
-        const nx=dx/(dist||1e-6), ny=dy/(dist||1e-6), pen=min-dist;
-        ball.x+=nx*pen; ball.y+=ny*pen;
-        const vDot=ball.vx*nx+ball.vy*ny;
-        ball.vx = ball.vx - (1+Config.physics.rimRest)*vDot*nx;
-        ball.vy = ball.vy - (1+Config.physics.rimRest)*vDot*ny;
-        ball.vx*=0.985; ball.vy*=0.985;
-      }
-    };
-    hitNode(rim.openLeft,  rim.barY, rim.nodeR);
-    hitNode(rim.openRight, rim.barY, rim.nodeR);
-  }
-}
 
   function checkGoal(ball){
     if(ball.scored || !ball.shot) return false;
@@ -363,15 +335,12 @@ function collideHoop(ball){
   // =========================
   class Input{
     constructor(){
-      // canvas/overlay는 bootstrap 이후에만 존재
       canvas.addEventListener('pointerdown', this.onDown, {passive:false});
       window.addEventListener('pointermove', this.onMove, {passive:false});
       window.addEventListener('pointerup',   this.onUp,   {passive:false});
       // 일부 WebView 보조 시작
       canvas.addEventListener('touchstart', (e)=>{
-        if (!State.running && overlay && overlay.classList.contains('visible')) {
-          e.preventDefault(); startGame();
-        }
+        if (!State.running && overlay && overlay.classList.contains('visible')) { e.preventDefault(); startGame(); }
       }, { passive:false });
 
       this.active=false; this.sx=0; this.sy=0; this.x=0; this.y=0; this.samples=[];
@@ -514,10 +483,7 @@ function collideHoop(ball){
 
     if (b.shot && checkGoal(b)){
       State.score += 1; if (scoreEl) scoreEl.textContent=String(State.score);
-
-      // [SFX] Goal
       playGoal();
-
       showToast('GOAL!', '#38ff9b');
       setTimeout(()=>placeBallOnFloor(), Config.respawnDelayMs);
       return;
@@ -544,7 +510,7 @@ function collideHoop(ball){
   }
 
   function drawSceneCover(){
-    if (!ctx) return; // [BOOTSTRAP_FIX]
+    if (!ctx) return;
     if (!(Assets.ready.scene && Assets.scene)){
       const g=ctx.createLinearGradient(0,0,0,WORLD.h);
       g.addColorStop(0,'#163d6b'); g.addColorStop(1,'#0c1220');
@@ -564,10 +530,9 @@ function collideHoop(ball){
   }
 
   function render(){
-    if (!ctx) return; // [BOOTSTRAP_FIX]
+    if (!ctx) return;
     ctx.setTransform(State.dpr,0,0,State.dpr,0,0);
     ctx.clearRect(0,0,WORLD.w,WORLD.h);
-
     drawSceneCover();
 
     const b=Game.ball, rim=Game.hoop && Game.hoop.rim;
@@ -600,34 +565,53 @@ function collideHoop(ball){
   }
 
   // =========================
+  // Overlay show/hide (클릭 막힘 방지 보장)
+  // =========================
+  function showOverlay(show){
+    if (!overlay) return;
+    if (show){
+      overlay.classList.add('visible');
+      overlay.style.display = 'flex';
+      overlay.style.pointerEvents = 'auto';
+      overlay.setAttribute('aria-hidden', 'false');
+    }else{
+      overlay.classList.remove('visible');
+      overlay.style.display = 'none';                // ★ display none
+      overlay.style.pointerEvents = 'none';          // ★ pointer-events none
+      overlay.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  // =========================
   // Start / End
   // =========================
   function startGame(){
-    // [SFX_SAFE] 시작 시에만 오디오 초기화/재생 시도
+    // 오디오는 시작 시 한 번만 시도(실패해도 진행)
     ensureSfx(); playBGM();
 
-    overlay && overlay.classList.remove('visible');
-    restartBtn && restartBtn.classList.remove('hidden');
+    showOverlay(false);
+    if (restartBtn) restartBtn.classList.remove('hidden');
 
     State.running=true;
     State.timeLeft=Config.roundSeconds; if (timerEl) timerEl.textContent=String(Config.roundSeconds);
     State.score=0; if (scoreEl) scoreEl.textContent='0';
     State.lastRAF=0; State.acc=0;
+
     if(!Game.input) Game.input=new Input();
     placeBallOnFloor();
     requestAnimationFrame(frame);
   }
+
   function endGame(){
     State.running=false;
-    restartBtn && restartBtn.classList.add('hidden');
+    if (restartBtn) restartBtn.classList.add('hidden');
     if (overlay){
-      overlay.classList.add('visible');
       const h = overlay.querySelector('h1'); const p = overlay.querySelector('p');
       if (h) h.textContent='TIME UP!';
       if (p) p.innerHTML=`득점: <strong>${State.score}</strong>개<br/>다시 도전해 보세요.`;
     }
-    // 원하면 BGM 유지 가능. 기본은 유지 (멈추고 싶으면 아래 주석 해제)
-    // stopBGM();
+    showOverlay(true);
+    // stopBGM(); // 라운드 종료 시 BGM 멈추려면 주석 해제
   }
 
   // =========================
@@ -636,7 +620,6 @@ function collideHoop(ball){
   const Game = { hoop:null, ball:null, input:null };
 
   function bindUI(){
-    // 안전하게 DOM 다시 쿼리
     canvas   = document.getElementById('game');
     scoreEl  = document.getElementById('score');
     timerEl  = document.getElementById('timer');
@@ -645,23 +628,44 @@ function collideHoop(ball){
     startBtn = document.getElementById('startBtn');
     restartBtn = document.getElementById('restart');
 
-    if (!canvas) { console.warn('[Basketball] <canvas id="game">가 필요합니다.'); return; }
+    if (!canvas){ console.warn('[Basketball] <canvas id="game"> 없음'); return; }
     ctx = canvas.getContext('2d');
 
     window.addEventListener('resize', resize);
-    startBtn && startBtn.addEventListener('click', startGame);
-    restartBtn && restartBtn.addEventListener('click', startGame);
 
-    // 오버레이 떠 있을 때, 캔버스 탭만으로도 시작 (모바일 보조)
-    canvas.addEventListener('click', () => {
+    // 시작 버튼 여러 입력 경로 등록
+    if (startBtn){
+      startBtn.addEventListener('click', (e)=>{ e.preventDefault(); startGame(); });
+      startBtn.addEventListener('pointerdown', (e)=>{ e.preventDefault(); }); // iOS 반복 클릭 방지
+    }
+    if (restartBtn){
+      restartBtn.addEventListener('click', (e)=>{ e.preventDefault(); startGame(); });
+    }
+    if (overlay){
+      // 오버레이 아무 곳 클릭/탭으로도 시작 가능
+      overlay.addEventListener('click', (e)=>{
+        const t = e.target;
+        // 버튼 외 클릭도 허용 (설명 텍스트 클릭 해도 시작)
+        if (!State.running) startGame();
+      }, { passive:true });
+    }
+    // 캔버스 클릭으로도 시작 (오버레이 떠 있을 때만)
+    canvas.addEventListener('click', ()=>{
       if (!State.running && overlay && overlay.classList.contains('visible')) startGame();
     }, { passive:true });
 
+    // 키보드 시작 (Enter/Space)
+    window.addEventListener('keydown', (e)=>{
+      if (!overlay) return;
+      if (!State.running && overlay.classList.contains('visible')){
+        if (e.code==='Enter' || e.code==='Space'){ e.preventDefault(); startGame(); }
+      }
+    });
+
     resize();
-    overlay && overlay.classList.add('visible');
+    showOverlay(true);
   }
 
-  // [BOOTSTRAP_FIX] DOM 상태에 따라 안전하게 바인딩
   if (document.readyState === 'loading'){
     document.addEventListener('DOMContentLoaded', bindUI);
   } else {
